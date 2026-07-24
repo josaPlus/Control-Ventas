@@ -1,0 +1,77 @@
+.row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr 1fr 1fr auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-sunken);
+}
+
+.headerRow {
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr 1fr 1fr auto;
+  gap: 10px;
+  padding: 0 10px;
+  margin-bottom: 6px;
+}
+
+.headerCell {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-muted);
+}
+
+.subtotalBox {
+  display: flex;
+  align-items: center;
+  height: 42px;
+  padding: 0 10px;
+  font-weight: 700;
+  color: var(--accent-700);
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.removeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background-color: var(--surface-card);
+  color: var(--status-critical);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.removeBtn:hover:not(:disabled) {
+  background-color: var(--status-critical-bg);
+}
+
+.removeBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.errorText {
+  font-size: 0.72rem;
+  color: var(--status-critical);
+  margin-top: 2px;
+}
+
+@media (max-width: 760px) {
+  .row,
+  .headerRow {
+    grid-template-columns: 1fr 1fr;
+  }
+  .headerRow {
+    display: none;
+  }
+}

@@ -1,0 +1,169 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 900px;
+}
+
+.headerCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+}
+
+.numeroNota {
+  display: flex;
+  flex-direction: column;
+}
+
+.numeroNotaLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  font-weight: 700;
+}
+
+.numeroNotaValue {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--accent-700);
+  font-variant-numeric: tabular-nums;
+}
+
+.section {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sectionTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 700px) {
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.radioGroup {
+  display: flex;
+  gap: 10px;
+}
+
+.radioOption {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink-secondary);
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.radioOption:hover {
+  background-color: var(--surface-hover);
+}
+
+.radioOptionChecked {
+  border-color: var(--accent-500);
+  background-color: var(--accent-50);
+  color: var(--accent-700);
+}
+
+.checkboxOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  width: fit-content;
+}
+
+.checkboxOption input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-500);
+}
+
+.detallesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.detallesList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.totalRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.totalLabel {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink-secondary);
+}
+
+.totalValue {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--accent-700);
+  font-variant-numeric: tabular-nums;
+}
+
+.formFooter {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: flex-end;
+}
+
+.feedback {
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.feedbackSuccess {
+  background-color: var(--status-good-bg);
+  color: var(--status-good);
+}
+
+.feedbackError {
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+}
+
+.submitBtn {
+  min-width: 180px;
+}

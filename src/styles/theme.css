@@ -1,0 +1,314 @@
+/* ============================================
+   Design system — Control de Ventas (Piñas de hilo)
+   Paleta y tokens compartidos por toda la app
+   ============================================ */
+
+:root {
+  color-scheme: light;
+
+  /* Superficies */
+  --surface-page: #f9f9f7;
+  --surface-card: #ffffff;
+  --surface-sunken: #f2f1ed;
+  --surface-hover: #eeede8;
+
+  /* Tinta */
+  --ink-primary: #0b0b0b;
+  --ink-secondary: #52514e;
+  --ink-muted: #898781;
+  --ink-on-accent: #ffffff;
+
+  /* Bordes */
+  --border-hairline: rgba(11, 11, 11, 0.1);
+  --border-strong: #c3c2b7;
+
+  /* Marca / acento (índigo textil) */
+  --accent-50: #eaeefb;
+  --accent-500: #3a5bd9;
+  --accent-600: #2c46ad;
+  --accent-700: #223687;
+
+  /* Categórica (gráficas) */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+
+  /* Estado */
+  --status-good: #0ca30c;
+  --status-good-bg: #e6f6e6;
+  --status-warning: #fab219;
+  --status-warning-bg: #fff4e0;
+  --status-critical: #d03b3b;
+  --status-critical-bg: #fbe8e8;
+
+  /* Gráficas */
+  --chart-surface: #fcfcfb;
+  --chart-grid: #e1e0d9;
+  --chart-axis: #c3c2b7;
+
+  /* Sombra / radios */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(11, 11, 11, 0.06);
+  --shadow-md: 0 4px 16px rgba(11, 11, 11, 0.08);
+  --shadow-lg: 0 12px 32px rgba(11, 11, 11, 0.14);
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--ink-primary);
+  background-color: var(--surface-page);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --surface-page: #0d0d0d;
+    --surface-card: #1a1a19;
+    --surface-sunken: #201f1d;
+    --surface-hover: #262523;
+
+    --ink-primary: #ffffff;
+    --ink-secondary: #c3c2b7;
+    --ink-muted: #898781;
+
+    --border-hairline: rgba(255, 255, 255, 0.1);
+    --border-strong: #383835;
+
+    --accent-50: #17203f;
+    --accent-500: #5f7ceb;
+    --accent-600: #7b93f0;
+    --accent-700: #9db0f5;
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #2fae55;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+
+    --status-good: #0ca30c;
+    --status-good-bg: #103019;
+    --status-warning: #fab219;
+    --status-warning-bg: #2e2410;
+    --status-critical: #e66767;
+    --status-critical-bg: #331313;
+
+    --chart-surface: #1a1a19;
+    --chart-grid: #2c2c2a;
+    --chart-axis: #383835;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0 0 0.4em 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0 0 0.6em 0;
+  color: var(--ink-secondary);
+}
+
+button {
+  font-family: inherit;
+}
+
+/* ============================================
+   Utilidades compartidas
+   ============================================ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: 0.65em 1.3em;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+  white-space: nowrap;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background-color: var(--accent-500);
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--accent-600);
+}
+
+.btn-secondary {
+  background-color: var(--surface-card);
+  color: var(--ink-primary);
+  border-color: var(--border-strong);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.btn-danger {
+  background-color: var(--surface-card);
+  color: var(--status-critical);
+  border-color: var(--status-critical);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: var(--status-critical-bg);
+}
+
+.btn-sm {
+  padding: 0.4em 0.9em;
+  font-size: 0.875rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  text-align: left;
+}
+
+.field-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.field-required::after {
+  content: " *";
+  color: var(--status-critical);
+}
+
+.field-error {
+  font-size: 0.8125rem;
+  color: var(--status-critical);
+}
+
+.field-hint {
+  font-size: 0.8125rem;
+  color: var(--ink-muted);
+}
+
+.input,
+.select,
+.textarea {
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--ink-primary);
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.6em 0.8em;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--accent-500);
+  box-shadow: 0 0 0 3px var(--accent-50);
+}
+
+.input.input-error,
+.select.input-error {
+  border-color: var(--status-critical);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 4.5em;
+}
+
+.card {
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.3em 0.75em;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.badge-good {
+  background-color: var(--status-good-bg);
+  color: var(--status-good);
+}
+
+.badge-warning {
+  background-color: var(--status-warning-bg);
+  color: #a86a00;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge-warning {
+    color: var(--status-warning);
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

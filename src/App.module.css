@@ -1,0 +1,27 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.dbStatus {
+  position: fixed;
+  bottom: 14px;
+  right: 18px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-md);
+  z-index: 200;
+}
+
+.dbStatusError {
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+}

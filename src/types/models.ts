@@ -9,7 +9,7 @@ export interface Cliente {
 }
 
 // ============================================
-// DETALLE DE VENTA (una línea por tipo de piña)
+// DETALLE DE VENTA (una línea por color de piña de hilo)
 // ============================================
 export interface DetalleVenta {
   id?: number;

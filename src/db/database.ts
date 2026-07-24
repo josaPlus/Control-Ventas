@@ -1,4 +1,5 @@
 import Database from '@tauri-apps/plugin-sql';
+import { invoke } from '@tauri-apps/api/core';
 import type { Cliente, NotaVenta, DetalleVenta, NotaVentaCompleta } from '../types/models';
 
 let db: Database | null = null;
@@ -60,60 +61,36 @@ export async function obtenerSiguienteNumeroNota(): Promise<number> {
   return result[0].siguiente;
 }
 
-// Inserta la nota de venta junto con todas sus líneas de detalle,
-// todo dentro de una transacción: o se guarda completo, o no se guarda nada.
+// Inserta la nota de venta junto con todas sus líneas de detalle.
+//
+// El trabajo lo hace el comando `crear_nota_venta` de Rust (src-tauri/src/lib.rs),
+// que abre una transacción real: o se guarda completo, o no se guarda nada.
+// No se puede hacer desde aquí porque cada execute() del plugin de SQL usa una
+// conexión distinta del pool y un BEGIN/COMMIT repartido entre conexiones
+// termina en "database is locked".
+//
+// El número de nota también se asigna allá dentro de la transacción, por eso se
+// devuelve junto con el id.
 export async function crearNotaVenta(
   nota: Omit<NotaVenta, 'id' | 'numero_nota'>,
   detalles: Omit<DetalleVenta, 'id' | 'nota_venta_id'>[]
-): Promise<number> {
-  const database = await getDb();
-
-  try {
-    await database.execute('BEGIN');
-
-    const numeroNota = await obtenerSiguienteNumeroNota();
-
-    // Insertar la cabecera de la nota
-    const resultNota = await database.execute(
-      `INSERT INTO notas_venta 
-        (numero_nota, cliente_id, fecha, tipo_deposito, pagado, comentario, total_venta) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        numeroNota,
-        nota.cliente_id,
-        nota.fecha,
-        nota.tipo_deposito,
-        nota.pagado ? 1 : 0,
-        nota.comentario ?? null,
-        nota.total_venta,
-      ]
-    );
-
-    const notaVentaId = resultNota.lastInsertId!;
-
-    // Insertar cada línea de detalle (un tipo de piña por línea)
-    for (const detalle of detalles) {
-      await database.execute(
-        `INSERT INTO detalle_venta 
-          (nota_venta_id, color_pina, cantidad_pinas, precio_pina, subtotal) 
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          notaVentaId,
-          detalle.color_pina,
-          detalle.cantidad_pinas,
-          detalle.precio_pina,
-          detalle.subtotal,
-        ]
-      );
-    }
-
-    await database.execute('COMMIT');
-    return notaVentaId;
-
-  } catch (error) {
-    await database.execute('ROLLBACK');
-    throw error; // se vuelve a lanzar para que el formulario pueda mostrar el error al usuario
-  }
+): Promise<{ id: number; numero_nota: number }> {
+  return await invoke<{ id: number; numero_nota: number }>('crear_nota_venta', {
+    nota: {
+      cliente_id: nota.cliente_id,
+      fecha: nota.fecha,
+      tipo_deposito: nota.tipo_deposito,
+      pagado: nota.pagado,
+      comentario: nota.comentario ?? null,
+      total_venta: nota.total_venta,
+    },
+    detalles: detalles.map((d) => ({
+      color_pina: d.color_pina,
+      cantidad_pinas: d.cantidad_pinas,
+      precio_pina: d.precio_pina,
+      subtotal: d.subtotal,
+    })),
+  });
 }
 
 // Trae todas las notas con su cliente (para el historial)

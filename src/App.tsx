@@ -1,57 +1,42 @@
-import { useState, useEffect } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import { getDb } from './db/database';
-import "./App.css";
+import { useEffect, useState } from "react";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { getDb } from "./db/database";
+import Navbar from "./components/Navbar";
+import Dashboard from "./pages/Dashboard";
+import NuevaVenta from "./pages/NuevaVenta";
+import HistorialVentas from "./pages/HistorialVentas";
+import Clientes from "./pages/Clientes";
+import styles from "./App.module.css";
+import "./styles/theme.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
-
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  const [dbError, setDbError] = useState<string | null>(null);
 
   useEffect(() => {
     getDb()
-      .then(() => console.log('✅ Base de datos conectada y migraciones aplicadas'))
-      .catch((err) => console.error('❌ Error conectando a la base de datos:', err));
+      .then(() => console.log("✅ Base de datos conectada y migraciones aplicadas"))
+      .catch((err) => {
+        console.error("❌ Error conectando a la base de datos:", err);
+        setDbError("No se pudo conectar a la base de datos local.");
+      });
   }, []);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <HashRouter>
+      <div className={styles.shell}>
+        <Navbar />
+        <main className={styles.content}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/nueva-venta" element={<NuevaVenta />} />
+            <Route path="/historial" element={<HistorialVentas />} />
+            <Route path="/clientes" element={<Clientes />} />
+          </Routes>
+        </main>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      {dbError && <div className={`${styles.dbStatus} ${styles.dbStatusError}`}>{dbError}</div>}
+    </HashRouter>
   );
 }
 

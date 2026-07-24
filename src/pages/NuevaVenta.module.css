@@ -1,0 +1,13 @@
+.page {
+  padding: 28px 32px 60px 32px;
+}
+
+.pageTitle {
+  font-size: 1.5rem;
+  margin-bottom: 4px;
+}
+
+.pageSubtitle {
+  color: var(--ink-muted);
+  margin-bottom: 24px;
+}
