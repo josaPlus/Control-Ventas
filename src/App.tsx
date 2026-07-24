@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
+import { getDb } from './db/database';
 import "./App.css";
 
 function App() {
@@ -11,6 +12,12 @@ function App() {
     // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
     setGreetMsg(await invoke("greet", { name }));
   }
+
+  useEffect(() => {
+    getDb()
+      .then(() => console.log('✅ Base de datos conectada y migraciones aplicadas'))
+      .catch((err) => console.error('❌ Error conectando a la base de datos:', err));
+  }, []);
 
   return (
     <main className="container">

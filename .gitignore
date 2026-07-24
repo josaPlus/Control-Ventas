@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Base de datos local
+*.db
+*.db-journal
+schema.sql
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/Cargo.lock  # opcional: en apps binarias muchos SÍ lo suben, ver nota abajo
+
+# Vite
+.vite/
