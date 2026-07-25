@@ -66,8 +66,25 @@ export default function ClienteForm({
     }
   };
 
+  // Se renderiza como <div>, no como <form>, porque este componente también se
+  // usa embebido dentro del formulario de la nota de venta (ClienteAutocomplete).
+  // Un <form> anidado es HTML inválido y hacía que el submit burbujeara al
+  // formulario de la venta, disparando su validación al guardar un cliente.
+  const enviar = handleSubmit(onSubmit);
+
   return (
-    <form className={styles.form} onSubmit={handleSubmit(onSubmit)} noValidate>
+    <div
+      className={styles.form}
+      onKeyDown={(e) => {
+        // Enter sigue guardando, como en un <form> normal, pero sin salirse
+        // al formulario de arriba.
+        if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+          e.preventDefault();
+          e.stopPropagation();
+          void enviar();
+        }
+      }}
+    >
       <div className="field">
         <label className="field-label field-required" htmlFor="comprador">
           Nombre del comprador
@@ -116,10 +133,10 @@ export default function ClienteForm({
             Cancelar
           </button>
         )}
-        <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+        <button type="button" className="btn btn-primary" onClick={() => void enviar()} disabled={isSubmitting}>
           {isSubmitting ? "Guardando..." : submitLabel ?? "Guardar cliente"}
         </button>
       </div>
-    </form>
+    </div>
   );
 }

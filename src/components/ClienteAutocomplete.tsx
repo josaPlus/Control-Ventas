@@ -139,6 +139,11 @@ export default function ClienteAutocomplete({
               onSelectCliente(cliente);
               setMostrarNuevo(false);
               setAbierto(false);
+              // Los resultados de la búsqueda anterior son de antes de crear
+              // este cliente; si no se limpian, al volver a "Cambiar" se
+              // mostraría "no se encontró" sobre datos viejos.
+              setTexto("");
+              setResultados([]);
             }}
             onCancel={() => setMostrarNuevo(false)}
           />
