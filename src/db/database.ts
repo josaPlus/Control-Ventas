@@ -48,6 +48,12 @@ export async function actualizarCliente(cliente: Cliente): Promise<void> {
   );
 }
 
+// Sólo se puede borrar un cliente que no tenga ventas registradas. Si las
+// tiene, el backend rechaza la operación con un mensaje explicando cuántas son.
+export async function eliminarCliente(clienteId: number): Promise<void> {
+  await invoke('eliminar_cliente', { clienteId });
+}
+
 // ============================================
 // NOTAS DE VENTA
 // ============================================
@@ -91,6 +97,37 @@ export async function crearNotaVenta(
       subtotal: d.subtotal,
     })),
   });
+}
+
+// Reemplaza el contenido de una nota existente (cabecera + todas sus líneas).
+// El número de nota no cambia: es el folio que el cliente ya tiene en su copia.
+export async function actualizarNotaVenta(
+  notaVentaId: number,
+  nota: Omit<NotaVenta, 'id' | 'numero_nota'>,
+  detalles: Omit<DetalleVenta, 'id' | 'nota_venta_id'>[]
+): Promise<void> {
+  await invoke('actualizar_nota_venta', {
+    notaVentaId,
+    nota: {
+      cliente_id: nota.cliente_id,
+      fecha: nota.fecha,
+      tipo_deposito: nota.tipo_deposito,
+      pagado: nota.pagado,
+      comentario: nota.comentario ?? null,
+      total_venta: nota.total_venta,
+    },
+    detalles: detalles.map((d) => ({
+      color_pina: d.color_pina,
+      cantidad_pinas: d.cantidad_pinas,
+      precio_pina: d.precio_pina,
+      subtotal: d.subtotal,
+    })),
+  });
+}
+
+// Borra la nota junto con todas sus líneas de detalle.
+export async function eliminarNotaVenta(notaVentaId: number): Promise<void> {
+  await invoke('eliminar_nota_venta', { notaVentaId });
 }
 
 // Trae todas las notas con su cliente (para el historial)

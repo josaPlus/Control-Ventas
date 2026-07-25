@@ -4,6 +4,7 @@ import { z } from "zod";
 import { useState } from "react";
 import type { Cliente } from "../types/models";
 import { crearCliente, actualizarCliente } from "../db/database";
+import ConfirmDialog from "./ConfirmDialog";
 import styles from "./ClienteForm.module.css";
 
 const clienteSchema = z.object({
@@ -34,6 +35,7 @@ export default function ClienteForm({
   onCancel,
 }: ClienteFormProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [cambiosPendientes, setCambiosPendientes] = useState<ClienteFormValues | null>(null);
 
   const {
     register,
@@ -48,23 +50,33 @@ export default function ClienteForm({
     },
   });
 
+  const editando = Boolean(initialValue?.id);
+
   const onSubmit = async (values: ClienteFormValues) => {
     setSaveError(null);
+    // Modificar un cliente ya registrado cambia cómo aparece en todas sus
+    // notas de venta anteriores, así que se confirma antes.
+    if (editando) {
+      setCambiosPendientes(values);
+      return;
+    }
     try {
-      if (initialValue?.id) {
-        const actualizado: Cliente = { ...initialValue, ...values };
-        await actualizarCliente(actualizado);
-        onSaved(actualizado);
-      } else {
-        const id = await crearCliente(values);
-        onSaved({ ...values, id });
-      }
+      const id = await crearCliente(values);
+      onSaved({ ...values, id });
     } catch (err) {
       console.error(err);
       const detalle = err instanceof Error ? err.message : String(err);
       setSaveError(`No se pudo guardar el cliente: ${detalle}`);
     }
   };
+
+  // El error se propaga para que lo muestre el diálogo de confirmación.
+  async function confirmarCambios() {
+    const actualizado: Cliente = { ...initialValue!, ...cambiosPendientes! };
+    await actualizarCliente(actualizado);
+    setCambiosPendientes(null);
+    onSaved(actualizado);
+  }
 
   // Se renderiza como <div>, no como <form>, porque este componente también se
   // usa embebido dentro del formulario de la nota de venta (ClienteAutocomplete).
@@ -137,6 +149,38 @@ export default function ClienteForm({
           {isSubmitting ? "Guardando..." : submitLabel ?? "Guardar cliente"}
         </button>
       </div>
+
+      {cambiosPendientes && initialValue && (
+        <ConfirmDialog
+          title={`¿Guardar los cambios de ${initialValue.comprador}?`}
+          message={
+            <>
+              Los datos nuevos se van a reflejar también en las notas de venta que
+              este cliente ya tenga registradas.
+              <ul className={styles.cambiosLista}>
+                {cambiosPendientes.comprador !== initialValue.comprador && (
+                  <li>
+                    Nombre: {initialValue.comprador} → <strong>{cambiosPendientes.comprador}</strong>
+                  </li>
+                )}
+                {cambiosPendientes.domicilio !== initialValue.domicilio && (
+                  <li>
+                    Domicilio: {initialValue.domicilio} → <strong>{cambiosPendientes.domicilio}</strong>
+                  </li>
+                )}
+                {cambiosPendientes.telefono !== initialValue.telefono && (
+                  <li>
+                    Teléfono: {initialValue.telefono} → <strong>{cambiosPendientes.telefono}</strong>
+                  </li>
+                )}
+              </ul>
+            </>
+          }
+          confirmLabel="Guardar cambios"
+          onConfirm={confirmarCambios}
+          onCancel={() => setCambiosPendientes(null)}
+        />
+      )}
     </div>
   );
 }

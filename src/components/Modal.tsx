@@ -4,10 +4,12 @@ import styles from "./Modal.module.css";
 interface ModalProps {
   title: string;
   onClose: () => void;
+  /** Panel más ancho, para el formulario de edición de una nota de venta. */
+  ancho?: boolean;
   children: ReactNode;
 }
 
-export default function Modal({ title, onClose, children }: ModalProps) {
+export default function Modal({ title, onClose, ancho = false, children }: ModalProps) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -18,7 +20,12 @@ export default function Modal({ title, onClose, children }: ModalProps) {
 
   return (
     <div className={styles.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={styles.panel} role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        className={`${styles.panel} ${ancho ? styles.panelAncho : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <div className={styles.header}>
           <h2 className={styles.title}>{title}</h2>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Cerrar">

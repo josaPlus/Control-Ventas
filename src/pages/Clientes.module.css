@@ -78,3 +78,37 @@
   text-align: center;
   color: var(--ink-muted);
 }
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.iconBtn:hover {
+  background-color: var(--surface-hover);
+  color: var(--ink-primary);
+  border-color: var(--border-strong);
+}
+
+.iconBtnDanger:hover {
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+  border-color: var(--status-critical);
+}

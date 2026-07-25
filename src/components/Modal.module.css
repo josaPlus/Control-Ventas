@@ -21,6 +21,10 @@
   overflow: hidden;
 }
 
+.panelAncho {
+  max-width: 900px;
+}
+
 .header {
   display: flex;
   align-items: center;

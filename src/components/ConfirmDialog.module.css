@@ -1,0 +1,82 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(11, 11, 11, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Por encima del Modal (z-index 100): la confirmación se abre desde dentro. */
+  z-index: 200;
+  padding: 24px;
+}
+
+.panel {
+  background-color: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 440px;
+  padding: 22px;
+}
+
+.head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background-color: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+
+.iconPeligro {
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+}
+
+.title {
+  font-size: 1.02rem;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+}
+
+.message {
+  font-size: 0.9rem;
+  color: var(--ink-secondary);
+  line-height: 1.5;
+}
+
+.error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.btnPeligro {
+  background-color: var(--status-critical);
+  color: #ffffff;
+  border: 1px solid var(--status-critical);
+}
+
+.btnPeligro:hover:not(:disabled) {
+  filter: brightness(0.92);
+}

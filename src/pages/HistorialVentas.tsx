@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { NotaVentaCompleta } from "../types/models";
 import type { VentaConComprador } from "../lib/dashboardStats";
-import { listarNotasVenta, obtenerNotaCompleta, actualizarEstadoPago } from "../db/database";
+import { listarNotasVenta, obtenerNotaCompleta, actualizarEstadoPago, eliminarNotaVenta } from "../db/database";
 import { formatMoney, formatDateLong } from "../lib/format";
 import Modal from "../components/Modal";
+import ConfirmDialog from "../components/ConfirmDialog";
+import NotaVentaForm from "../components/NotaVentaForm";
+import { IconPencil, IconTrash } from "../components/Icons";
 import styles from "./HistorialVentas.module.css";
 
 type FiltroEstado = "todos" | "pagado" | "pendiente";
@@ -19,6 +22,8 @@ export default function HistorialVentas() {
 
   const [notaAbierta, setNotaAbierta] = useState<NotaVentaCompleta | null>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
 
   useEffect(() => {
     cargarNotas();
@@ -57,6 +62,7 @@ export default function HistorialVentas() {
   async function abrirDetalle(id: number) {
     setCargandoDetalle(true);
     setNotaAbierta(null);
+    setEditando(false);
     try {
       const completa = await obtenerNotaCompleta(id);
       setNotaAbierta(completa);
@@ -65,6 +71,42 @@ export default function HistorialVentas() {
     } finally {
       setCargandoDetalle(false);
     }
+  }
+
+  // Atajos desde la fila: cargan la nota completa y abren directamente el
+  // formulario o la confirmación, sin pasar por la vista de detalle.
+  async function editarDesdeFila(id: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    await abrirDetalle(id);
+    setEditando(true);
+  }
+
+  async function eliminarDesdeFila(id: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    await abrirDetalle(id);
+    setConfirmandoBorrado(true);
+  }
+
+  function cerrarDetalle() {
+    setNotaAbierta(null);
+    setEditando(false);
+    setConfirmandoBorrado(false);
+  }
+
+  // Tras editar, se recarga el detalle para que la vista refleje lo guardado.
+  async function alGuardarEdicion() {
+    const id = notaAbierta!.id!;
+    setEditando(false);
+    await cargarNotas();
+    await abrirDetalle(id);
+  }
+
+  // El error se propaga a propósito: lo muestra el propio diálogo.
+  async function borrarNota() {
+    await eliminarNotaVenta(notaAbierta!.id!);
+    setConfirmandoBorrado(false);
+    cerrarDetalle();
+    await cargarNotas();
   }
 
   async function togglePagado(id: number, pagadoActual: boolean, e?: React.MouseEvent) {
@@ -140,6 +182,7 @@ export default function HistorialVentas() {
                 <th>Tipo de depósito</th>
                 <th>Total</th>
                 <th>Estado</th>
+                <th aria-label="Acciones" />
               </tr>
             </thead>
             <tbody>
@@ -165,6 +208,28 @@ export default function HistorialVentas() {
                       </span>
                     </button>
                   </td>
+                  <td>
+                    <div className={styles.rowActions}>
+                      <button
+                        type="button"
+                        className={styles.iconBtn}
+                        onClick={(e) => editarDesdeFila(n.id!, e)}
+                        title="Editar nota"
+                        aria-label={`Editar la nota #${n.numero_nota}`}
+                      >
+                        <IconPencil />
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                        onClick={(e) => eliminarDesdeFila(n.id!, e)}
+                        title="Eliminar nota"
+                        aria-label={`Eliminar la nota #${n.numero_nota}`}
+                      >
+                        <IconTrash />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -173,9 +238,28 @@ export default function HistorialVentas() {
       )}
 
       {(cargandoDetalle || notaAbierta) && (
-        <Modal title={notaAbierta ? `Nota #${notaAbierta.numero_nota}` : "Cargando..."} onClose={() => setNotaAbierta(null)}>
+        <Modal
+          title={
+            !notaAbierta
+              ? "Cargando..."
+              : editando
+                ? `Editar nota #${notaAbierta.numero_nota}`
+                : `Nota #${notaAbierta.numero_nota}`
+          }
+          ancho={editando}
+          onClose={cerrarDetalle}
+        >
           {cargandoDetalle && <div className={styles.detailLoading}>Cargando detalle...</div>}
-          {!cargandoDetalle && notaAbierta && (
+
+          {!cargandoDetalle && notaAbierta && editando && (
+            <NotaVentaForm
+              notaExistente={notaAbierta}
+              onGuardado={alGuardarEdicion}
+              onCancelar={() => setEditando(false)}
+            />
+          )}
+
+          {!cargandoDetalle && notaAbierta && !editando && (
             <>
               <div className={styles.detailHeader}>
                 <div>
@@ -229,9 +313,47 @@ export default function HistorialVentas() {
               {notaAbierta.comentario && (
                 <div className={styles.detailComentario}>{notaAbierta.comentario}</div>
               )}
+
+              <div className={styles.detailActions}>
+                <button
+                  type="button"
+                  className={`btn btn-secondary btn-sm ${styles.actionBtn}`}
+                  onClick={() => setEditando(true)}
+                >
+                  <IconPencil />
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-secondary btn-sm ${styles.actionBtn} ${styles.actionBtnDanger}`}
+                  onClick={() => setConfirmandoBorrado(true)}
+                >
+                  <IconTrash />
+                  Eliminar
+                </button>
+              </div>
             </>
           )}
         </Modal>
+      )}
+
+      {confirmandoBorrado && notaAbierta && (
+        <ConfirmDialog
+          title={`¿Eliminar la nota #${notaAbierta.numero_nota}?`}
+          message={
+            <>
+              Se borrará la venta de <strong>{notaAbierta.cliente.comprador}</strong> por{" "}
+              <strong>{formatMoney(notaAbierta.total_venta)}</strong> y sus{" "}
+              {notaAbierta.detalles.length}{" "}
+              {notaAbierta.detalles.length === 1 ? "línea" : "líneas"} de detalle. Esta
+              acción no se puede deshacer.
+            </>
+          }
+          confirmLabel="Eliminar nota"
+          tono="peligro"
+          onConfirm={borrarNota}
+          onCancel={() => setConfirmandoBorrado(false)}
+        />
       )}
     </div>
   );

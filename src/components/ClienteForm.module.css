@@ -10,3 +10,11 @@
   gap: 10px;
   margin-top: 4px;
 }
+
+.cambiosLista {
+  margin: 10px 0 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

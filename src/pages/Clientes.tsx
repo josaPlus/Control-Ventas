@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Cliente } from "../types/models";
-import { listarClientes, buscarClientes } from "../db/database";
+import { listarClientes, buscarClientes, eliminarCliente } from "../db/database";
 import Modal from "../components/Modal";
 import ClienteForm from "../components/ClienteForm";
+import ConfirmDialog from "../components/ConfirmDialog";
+import { IconPencil, IconTrash } from "../components/Icons";
 import styles from "./Clientes.module.css";
 
 export default function Clientes() {
@@ -10,6 +12,7 @@ export default function Clientes() {
   const [cargando, setCargando] = useState(true);
   const [texto, setTexto] = useState("");
   const [modal, setModal] = useState<null | { modo: "crear" } | { modo: "editar"; cliente: Cliente }>(null);
+  const [porEliminar, setPorEliminar] = useState<Cliente | null>(null);
 
   useEffect(() => {
     cargarClientes();
@@ -37,6 +40,14 @@ export default function Clientes() {
   function onSaved() {
     setModal(null);
     cargarClientes(texto);
+  }
+
+  // El error se propaga a propósito para que el diálogo lo muestre: el backend
+  // rechaza el borrado si el cliente ya tiene ventas y explica cuántas son.
+  async function borrarCliente() {
+    await eliminarCliente(porEliminar!.id!);
+    setPorEliminar(null);
+    await cargarClientes(texto);
   }
 
   return (
@@ -78,13 +89,26 @@ export default function Clientes() {
               <span className={styles.meta}>{cliente.domicilio}</span>
               <span className={styles.meta}>Tel. {cliente.telefono}</span>
             </div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setModal({ modo: "editar", cliente })}
-            >
-              Editar
-            </button>
+            <div className={styles.rowActions}>
+              <button
+                type="button"
+                className={styles.iconBtn}
+                onClick={() => setModal({ modo: "editar", cliente })}
+                title="Editar cliente"
+                aria-label={`Editar a ${cliente.comprador}`}
+              >
+                <IconPencil />
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                onClick={() => setPorEliminar(cliente)}
+                title="Eliminar cliente"
+                aria-label={`Eliminar a ${cliente.comprador}`}
+              >
+                <IconTrash />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -98,6 +122,22 @@ export default function Clientes() {
             onCancel={() => setModal(null)}
           />
         </Modal>
+      )}
+
+      {porEliminar && (
+        <ConfirmDialog
+          title={`¿Eliminar a ${porEliminar.comprador}?`}
+          message={
+            <>
+              Se borrarán sus datos de contacto ({porEliminar.domicilio}, tel.{" "}
+              {porEliminar.telefono}). Esta acción no se puede deshacer.
+            </>
+          }
+          confirmLabel="Eliminar cliente"
+          tono="peligro"
+          onConfirm={borrarCliente}
+          onCancel={() => setPorEliminar(null)}
+        />
       )}
     </div>
   );

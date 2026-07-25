@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import type { Cliente, DetalleVenta } from "../types/models";
-import { crearNotaVenta, obtenerSiguienteNumeroNota } from "../db/database";
+import type { Cliente, DetalleVenta, NotaVentaCompleta } from "../types/models";
+import { crearNotaVenta, actualizarNotaVenta, obtenerSiguienteNumeroNota } from "../db/database";
 import { formatMoney, todayIso } from "../lib/format";
 import ClienteAutocomplete from "./ClienteAutocomplete";
+import ConfirmDialog from "./ConfirmDialog";
 import DetalleVentaRow, { COLORES_PINA_SUGERIDOS } from "./DetalleVentaRow";
 import styles from "./NotaVentaForm.module.css";
 
@@ -17,21 +18,43 @@ interface FormErrors {
   detalles?: Record<number, { color_pina?: string; cantidad_pinas?: string; precio_pina?: string }>;
 }
 
-export default function NotaVentaForm() {
-  const [numeroNota, setNumeroNota] = useState<number | null>(null);
-  const [cliente, setCliente] = useState<Cliente | null>(null);
-  const [fecha, setFecha] = useState(todayIso());
-  const [tipoDeposito, setTipoDeposito] = useState<"efectivo" | "deposito">("efectivo");
-  const [pagado, setPagado] = useState(false);
-  const [comentario, setComentario] = useState("");
-  const [detalles, setDetalles] = useState<DetalleVenta[]>([detalleVacio()]);
+interface NotaVentaFormProps {
+  /** Si viene, el formulario edita esa nota en vez de crear una nueva. */
+  notaExistente?: NotaVentaCompleta;
+  onGuardado?: () => void;
+  onCancelar?: () => void;
+}
+
+export default function NotaVentaForm({
+  notaExistente,
+  onGuardado,
+  onCancelar,
+}: NotaVentaFormProps = {}) {
+  const editando = notaExistente !== undefined;
+
+  const [numeroNota, setNumeroNota] = useState<number | null>(
+    notaExistente?.numero_nota ?? null
+  );
+  const [cliente, setCliente] = useState<Cliente | null>(notaExistente?.cliente ?? null);
+  const [fecha, setFecha] = useState(notaExistente?.fecha ?? todayIso());
+  const [tipoDeposito, setTipoDeposito] = useState<"efectivo" | "deposito">(
+    notaExistente?.tipo_deposito ?? "efectivo"
+  );
+  const [pagado, setPagado] = useState(notaExistente?.pagado ?? false);
+  const [comentario, setComentario] = useState(notaExistente?.comentario ?? "");
+  const [detalles, setDetalles] = useState<DetalleVenta[]>(
+    notaExistente ? notaExistente.detalles.map((d) => ({ ...d })) : [detalleVacio()]
+  );
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [statusMsg, setStatusMsg] = useState("");
+  const [confirmandoCambios, setConfirmandoCambios] = useState(false);
 
   useEffect(() => {
-    cargarSiguienteNumero();
-  }, []);
+    // Al editar, el número ya existe y no se recalcula: es el folio con el que
+    // el cliente ya tiene su copia de la nota.
+    if (!editando) cargarSiguienteNumero();
+  }, [editando]);
 
   async function cargarSiguienteNumero() {
     try {
@@ -77,29 +100,40 @@ export default function NotaVentaForm() {
     return Object.keys(nuevo).length === 0;
   }
 
+  function lineasParaGuardar() {
+    return detalles.map(({ color_pina, cantidad_pinas, precio_pina, subtotal }) => ({
+      color_pina,
+      cantidad_pinas,
+      precio_pina,
+      subtotal,
+    }));
+  }
+
+  function cabeceraParaGuardar() {
+    return {
+      cliente_id: cliente!.id!,
+      fecha,
+      tipo_deposito: tipoDeposito,
+      pagado,
+      comentario: comentario.trim() || undefined,
+      total_venta: total,
+    };
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setStatus("idle");
     if (!validar()) return;
 
+    // Al editar se pide confirmación antes de tocar una nota ya registrada.
+    if (editando) {
+      setConfirmandoCambios(true);
+      return;
+    }
+
     setStatus("submitting");
     try {
-      const guardada = await crearNotaVenta(
-        {
-          cliente_id: cliente!.id!,
-          fecha,
-          tipo_deposito: tipoDeposito,
-          pagado,
-          comentario: comentario.trim() || undefined,
-          total_venta: total,
-        },
-        detalles.map(({ color_pina, cantidad_pinas, precio_pina, subtotal }) => ({
-          color_pina,
-          cantidad_pinas,
-          precio_pina,
-          subtotal,
-        }))
-      );
+      const guardada = await crearNotaVenta(cabeceraParaGuardar(), lineasParaGuardar());
 
       // El número definitivo lo asigna el backend dentro de la transacción;
       // el que se muestra en pantalla antes de guardar es solo una previsualización.
@@ -120,6 +154,14 @@ export default function NotaVentaForm() {
       setStatusMsg(`Ocurrió un error al guardar la venta: ${detalle}`);
       setStatus("error");
     }
+  }
+
+  // Se llama desde el diálogo de confirmación. Si algo falla, el error se
+  // propaga para que el propio diálogo lo muestre y no cierre nada.
+  async function guardarCambios() {
+    await actualizarNotaVenta(notaExistente!.id!, cabeceraParaGuardar(), lineasParaGuardar());
+    setConfirmandoCambios(false);
+    onGuardado?.();
   }
 
   return (
@@ -241,10 +283,41 @@ export default function NotaVentaForm() {
       {status === "error" && <div className={`${styles.feedback} ${styles.feedbackError}`}>{statusMsg}</div>}
 
       <div className={styles.formFooter}>
+        {onCancelar && (
+          <button type="button" className="btn btn-secondary" onClick={onCancelar}>
+            Cancelar
+          </button>
+        )}
         <button type="submit" className={`btn btn-primary ${styles.submitBtn}`} disabled={status === "submitting"}>
-          {status === "submitting" ? "Guardando..." : "Guardar venta"}
+          {status === "submitting"
+            ? "Guardando..."
+            : editando
+              ? "Guardar cambios"
+              : "Guardar venta"}
         </button>
       </div>
+
+      {confirmandoCambios && notaExistente && (
+        <ConfirmDialog
+          title={`¿Guardar los cambios de la nota #${notaExistente.numero_nota}?`}
+          message={
+            <>
+              Se va a reemplazar el contenido de esta nota ya registrada.
+              {total !== notaExistente.total_venta && (
+                <>
+                  {" "}
+                  El total pasa de <strong>{formatMoney(notaExistente.total_venta)}</strong> a{" "}
+                  <strong>{formatMoney(total)}</strong>.
+                </>
+              )}{" "}
+              El número de nota no cambia.
+            </>
+          }
+          confirmLabel="Guardar cambios"
+          onConfirm={guardarCambios}
+          onCancel={() => setConfirmandoCambios(false)}
+        />
+      )}
     </form>
   );
 }
