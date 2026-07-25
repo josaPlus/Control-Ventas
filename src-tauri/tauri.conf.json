@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "control-ventas",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.josaf.control-ventas",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -31,5 +31,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5U1AyU0hwZEpRTklzVzM2WWc3M3lreFBxWjltUXBTQ21LS0tvdzZMWDR1Y0FBQkFBQUFBQUFBQUFBQUlBQUFBQXRDejNiY1NybWRLRWs0MnFoVVo4S1pYb1RmN0lrM0dUMENkKzFBTHcxSXRsV1NoV2F5WVdnaFF0WFRpT2YrVWRySVJ1aEZVQWx4bXQ1WTRES1Vvd0ZidkZtV3BJRmRVOUdSUWNQWEZYbEY3SThQSEFva2dMNW42bUxhdUQrOVZsVCsyUTh2RmQ2dXM9Cg==",
+      "endpoints": [
+        "https://github.com/josaPlus/Control-Ventas/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

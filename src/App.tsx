@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import NuevaVenta from "./pages/NuevaVenta";
 import HistorialVentas from "./pages/HistorialVentas";
 import Clientes from "./pages/Clientes";
+import { UpdateDialog } from "./components/UpdateDialog";
 import styles from "./App.module.css";
 import "./styles/theme.css";
 
@@ -23,6 +24,7 @@ function App() {
 
   return (
     <HashRouter>
+      <UpdateDialog />
       <div className={styles.shell}>
         <Navbar />
         <main className={styles.content}>

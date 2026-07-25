@@ -253,11 +253,10 @@ async fn eliminar_cliente(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = vec![
-        Migration {
-            version: 1,
-            description: "crear_tablas_iniciales",
-            sql: "
+    let migrations = vec![Migration {
+        version: 1,
+        description: "crear_tablas_iniciales",
+        sql: "
                 CREATE TABLE clientes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     comprador TEXT NOT NULL,
@@ -287,9 +286,8 @@ pub fn run() {
                     FOREIGN KEY (nota_venta_id) REFERENCES notas_venta(id)
                 );
             ",
-            kind: MigrationKind::Up,
-        }
-    ];
+        kind: MigrationKind::Up,
+    }];
 
     tauri::Builder::default()
         .plugin(
@@ -298,6 +296,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             crear_nota_venta,
