@@ -24,6 +24,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,7 +35,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5U1AyU0hwZEpRTklzVzM2WWc3M3lreFBxWjltUXBTQ21LS0tvdzZMWDR1Y0FBQkFBQUFBQUFBQUFBQUlBQUFBQXRDejNiY1NybWRLRWs0MnFoVVo4S1pYb1RmN0lrM0dUMENkKzFBTHcxSXRsV1NoV2F5WVdnaFF0WFRpT2YrVWRySVJ1aEZVQWx4bXQ1WTRES1Vvd0ZidkZtV3BJRmRVOUdSUWNQWEZYbEY3SThQSEFva2dMNW42bUxhdUQrOVZsVCsyUTh2RmQ2dXM9Cg==",
+      "pubkey": "TU_CLAVE_PUBLICA",
       "endpoints": [
         "https://github.com/josaPlus/Control-Ventas/releases/latest/download/latest.json"
       ]
