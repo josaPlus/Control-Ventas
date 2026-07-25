@@ -35,7 +35,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "TU_CLAVE_PUBLICA",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFEOTczRkJBOEY5QUNGNTUKUldSVno1cVB1aitYSFNlYlVWNThycXhTUjF2WHltMFdsSE9lN2dUWHdkeXdBY0tyeUZKQVhZVTYK",
       "endpoints": [
         "https://github.com/josaPlus/Control-Ventas/releases/latest/download/latest.json"
       ]
