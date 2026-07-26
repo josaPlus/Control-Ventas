@@ -41,17 +41,80 @@ export function ventasPorDia(notas: VentaConComprador[], dias: number): PuntoVen
 export interface PuntoVentaColor {
   color: string;
   total: number;
+  pinas: number;
 }
 
 export function ventasPorColor(detalles: DetalleVenta[]): PuntoVentaColor[] {
-  const totalesPorColor = new Map<string, number>();
+  const porColor = new Map<string, { total: number; pinas: number }>();
   for (const d of detalles) {
     const clave = d.color_pina.trim() || "Sin especificar";
-    totalesPorColor.set(clave, (totalesPorColor.get(clave) ?? 0) + d.subtotal);
+    const actual = porColor.get(clave) ?? { total: 0, pinas: 0 };
+    actual.total += d.subtotal;
+    actual.pinas += d.cantidad_pinas;
+    porColor.set(clave, actual);
   }
-  return Array.from(totalesPorColor.entries())
-    .map(([color, total]) => ({ color, total }))
+  return Array.from(porColor.entries())
+    .map(([color, v]) => ({ color, total: v.total, pinas: v.pinas }))
     .sort((a, b) => b.total - a.total);
+}
+
+// ============================================
+// PIÑAS VENDIDAS (volumen, no dinero)
+// ============================================
+
+// Las líneas de detalle no guardan fecha propia: la heredan de su nota.
+export type DetalleConFecha = DetalleVenta & { fecha: string };
+
+export function pinasEnRango(
+  detalles: DetalleConFecha[],
+  desde: string,
+  hasta: string
+): number {
+  return detalles
+    .filter((d) => d.fecha >= desde && d.fecha <= hasta)
+    .reduce((acc, d) => acc + d.cantidad_pinas, 0);
+}
+
+export interface Comparativo {
+  actual: number;
+  anterior: number;
+  /** null cuando no hay con qué comparar (el periodo anterior fue cero). */
+  cambioPct: number | null;
+}
+
+export function comparar(actual: number, anterior: number): Comparativo {
+  return {
+    actual,
+    anterior,
+    cambioPct: anterior === 0 ? null : ((actual - anterior) / anterior) * 100,
+  };
+}
+
+export interface PuntoPinasMes {
+  mes: string; // "YYYY-MM"
+  pinas: number;
+  total: number;
+}
+
+export function pinasPorMes(
+  detalles: DetalleConFecha[],
+  meses: string[]
+): PuntoPinasMes[] {
+  const porMes = new Map<string, { pinas: number; total: number }>();
+  for (const d of detalles) {
+    const mes = d.fecha.slice(0, 7);
+    const actual = porMes.get(mes) ?? { pinas: 0, total: 0 };
+    actual.pinas += d.cantidad_pinas;
+    actual.total += d.subtotal;
+    porMes.set(mes, actual);
+  }
+  // Se recorre la lista de meses pedida para que los meses sin ventas
+  // aparezcan en cero en vez de desaparecer de la gráfica.
+  return meses.map((mes) => ({
+    mes,
+    pinas: porMes.get(mes)?.pinas ?? 0,
+    total: porMes.get(mes)?.total ?? 0,
+  }));
 }
 
 export interface ResumenPago {

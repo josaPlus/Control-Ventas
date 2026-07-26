@@ -112,3 +112,40 @@
   text-align: center;
   color: var(--ink-muted);
 }
+
+.sectionTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+  margin: 28px 0 14px 0;
+}
+
+.trend {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.trendUp {
+  color: var(--status-good);
+}
+
+.trendDown {
+  color: var(--status-critical);
+}
+
+.trendNeutral {
+  color: var(--ink-muted);
+}
+
+/* La referencia contra la que se compara va en tono apagado: el dato
+   protagonista es el porcentaje. */
+.trendBase {
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--ink-muted);
+}

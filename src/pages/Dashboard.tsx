@@ -12,22 +12,37 @@ import {
   Cell,
 } from "recharts";
 import { listarNotasVenta, obtenerNotaCompleta } from "../db/database";
-import type { DetalleVenta } from "../types/models";
-import { formatMoney, formatDateLong, todayIso, daysAgoIso } from "../lib/format";
+import {
+  formatMoney,
+  formatDateLong,
+  formatMesCorto,
+  formatPorcentaje,
+  formatPinas,
+  todayIso,
+  daysAgoIso,
+  inicioDeMesIso,
+  mismoDiaMesAnteriorIso,
+  mesesRecientes,
+} from "../lib/format";
 import {
   type VentaConComprador,
+  type DetalleConFecha,
+  type Comparativo,
   sumaEnRango,
   sumaDelMesActual,
   ventasPorDia,
   ventasPorColor,
   resumenPago,
+  pinasEnRango,
+  pinasPorMes,
+  comparar,
 } from "../lib/dashboardStats";
 import ChartTooltip from "../components/ChartTooltip";
 import styles from "./Dashboard.module.css";
 
 export default function Dashboard() {
   const [notas, setNotas] = useState<VentaConComprador[]>([]);
-  const [detalles, setDetalles] = useState<DetalleVenta[]>([]);
+  const [detalles, setDetalles] = useState<DetalleConFecha[]>([]);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -48,7 +63,11 @@ export default function Dashboard() {
       const completas = await Promise.all(
         listaNotas.map((n) => obtenerNotaCompleta(n.id!))
       );
-      const todosLosDetalles = completas.flatMap((c) => c?.detalles ?? []);
+      // Cada línea se queda con la fecha de su nota: sin eso no se puede medir
+      // cuántas piñas se vendieron en un periodo.
+      const todosLosDetalles = completas.flatMap((c) =>
+        (c?.detalles ?? []).map((d) => ({ ...d, fecha: c!.fecha }))
+      );
       setDetalles(todosLosDetalles);
     } catch (err) {
       console.error(err);
@@ -64,6 +83,37 @@ export default function Dashboard() {
   const serieDiaria = useMemo(() => ventasPorDia(notas, 14), [notas]);
   const serieColor = useMemo(() => ventasPorColor(detalles), [detalles]);
   const pago = useMemo(() => resumenPago(notas), [notas]);
+
+  // Piñas vendidas, comparadas siempre contra un periodo de la misma longitud
+  // para que el porcentaje signifique algo.
+  const pinasHoy = useMemo(
+    () => comparar(
+      pinasEnRango(detalles, todayIso(), todayIso()),
+      pinasEnRango(detalles, daysAgoIso(1), daysAgoIso(1))
+    ),
+    [detalles]
+  );
+
+  const pinasSemana = useMemo(
+    () => comparar(
+      pinasEnRango(detalles, daysAgoIso(6), todayIso()),
+      pinasEnRango(detalles, daysAgoIso(13), daysAgoIso(7))
+    ),
+    [detalles]
+  );
+
+  const pinasMes = useMemo(
+    () => comparar(
+      pinasEnRango(detalles, inicioDeMesIso(), todayIso()),
+      pinasEnRango(detalles, inicioDeMesIso(-1), mismoDiaMesAnteriorIso())
+    ),
+    [detalles]
+  );
+
+  const seriePinasMes = useMemo(
+    () => pinasPorMes(detalles, mesesRecientes(6)),
+    [detalles]
+  );
 
   const datosPago = [
     { name: "Pagado", value: pago.pagado.total, count: pago.pagado.count, color: "var(--status-good)" },
@@ -87,6 +137,28 @@ export default function Dashboard() {
         <StatCard label="Vendido hoy" value={formatMoney(totalHoy)} />
         <StatCard label="Vendido esta semana" value={formatMoney(totalSemana)} />
         <StatCard label="Vendido este mes" value={formatMoney(totalMes)} />
+      </div>
+
+      <h2 className={styles.sectionTitle}>Piñas de hilo vendidas</h2>
+      <div className={styles.statsRow}>
+        <StatCard
+          label="Piñas hoy"
+          value={formatPinas(pinasHoy.actual)}
+          comparativo={pinasHoy}
+          contra="ayer"
+        />
+        <StatCard
+          label="Piñas esta semana"
+          value={formatPinas(pinasSemana.actual)}
+          comparativo={pinasSemana}
+          contra="los 7 días anteriores"
+        />
+        <StatCard
+          label="Piñas este mes"
+          value={formatPinas(pinasMes.actual)}
+          comparativo={pinasMes}
+          contra="el mismo periodo del mes pasado"
+        />
       </div>
 
       <div className={styles.chartsGrid}>
@@ -132,6 +204,56 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className={styles.chartsGrid}>
+        <div className={`card ${styles.chartCard}`}>
+          <h3 className={styles.chartTitle}>Piñas vendidas por mes</h3>
+          <p className={styles.chartSubtitle}>
+            Volumen de los últimos 6 meses. Aquí se ve si el negocio va creciendo o
+            cayendo, sin que los cambios de precio distorsionen la lectura.
+          </p>
+          {seriePinasMes.every((p) => p.pinas === 0) ? (
+            <div className={styles.emptyChart}>Aún no hay piñas vendidas registradas.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={seriePinasMes} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                <XAxis
+                  dataKey="mes"
+                  tickFormatter={(m) => formatMesCorto(m)}
+                  tick={{ fill: "var(--ink-muted)", fontSize: 12 }}
+                  axisLine={{ stroke: "var(--chart-axis)" }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={(v) => formatPinas(v)}
+                  tick={{ fill: "var(--ink-muted)", fontSize: 12 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={60}
+                />
+                <Tooltip
+                  cursor={{ fill: "var(--surface-hover)" }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const item = payload[0].payload as { pinas: number; total: number };
+                    return (
+                      <ChartTooltip
+                        title={formatMesCorto(label as string)}
+                        rows={[
+                          { label: "Piñas", value: formatPinas(item.pinas), color: "var(--series-3)" },
+                          { label: "Vendido", value: formatMoney(item.total) },
+                        ]}
+                      />
+                    );
+                  }}
+                />
+                <Bar dataKey="pinas" fill="var(--series-3)" radius={[4, 4, 0, 0]} maxBarSize={48} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
       <div className={styles.chartsRow}>
         <div className={`card ${styles.chartCard}`}>
           <h3 className={styles.chartTitle}>Ventas por color de hilo</h3>
@@ -165,11 +287,14 @@ export default function Dashboard() {
                   cursor={{ fill: "var(--surface-hover)" }}
                   content={({ active, payload }) => {
                     if (!active || !payload || payload.length === 0) return null;
-                    const item = payload[0].payload as { color: string; total: number };
+                    const item = payload[0].payload as { color: string; total: number; pinas: number };
                     return (
                       <ChartTooltip
                         title={item.color}
-                        rows={[{ label: "Vendido", value: formatMoney(item.total), color: "var(--series-1)" }]}
+                        rows={[
+                          { label: "Vendido", value: formatMoney(item.total), color: "var(--series-1)" },
+                          { label: "Piñas", value: formatPinas(item.pinas) },
+                        ]}
                       />
                     );
                   }}
@@ -236,11 +361,51 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({
+  label,
+  value,
+  comparativo,
+  contra,
+}: {
+  label: string;
+  value: string;
+  comparativo?: Comparativo;
+  contra?: string;
+}) {
   return (
     <div className={`card ${styles.statCard}`}>
       <span className={styles.statLabel}>{label}</span>
       <span className={styles.statValue}>{value}</span>
+      {comparativo && <Tendencia comparativo={comparativo} contra={contra} />}
     </div>
+  );
+}
+
+// Muestra el cambio contra el periodo anterior. Sin base de comparación (el
+// periodo previo en cero) no se inventa un porcentaje: un "+100 %" saliendo de
+// cero no le dice nada útil al usuario.
+function Tendencia({ comparativo, contra }: { comparativo: Comparativo; contra?: string }) {
+  const { actual, anterior, cambioPct } = comparativo;
+
+  if (cambioPct === null) {
+    return (
+      <span className={`${styles.trend} ${styles.trendNeutral}`}>
+        {actual > 0 ? "Sin ventas en el periodo anterior para comparar" : "Sin movimiento"}
+      </span>
+    );
+  }
+
+  const sube = cambioPct > 0;
+  const igual = Math.abs(cambioPct) < 0.05;
+  const clase = igual ? styles.trendNeutral : sube ? styles.trendUp : styles.trendDown;
+
+  return (
+    <span className={`${styles.trend} ${clase}`}>
+      <span aria-hidden="true">{igual ? "=" : sube ? "▲" : "▼"}</span>
+      {igual ? "Sin cambio" : formatPorcentaje(cambioPct)}
+      <span className={styles.trendBase}>
+        vs. {formatPinas(anterior)} {contra ? `· ${contra}` : ""}
+      </span>
+    </span>
   );
 }
