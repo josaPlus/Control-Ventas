@@ -1,0 +1,115 @@
+.pantalla {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background-color: var(--surface-page);
+}
+
+.contenido {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.icono {
+  color: var(--accent-500);
+  margin-bottom: 14px;
+}
+
+.titulo {
+  font-size: 1.7rem;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  color: var(--ink-primary);
+}
+
+.subtitulo {
+  color: var(--ink-secondary);
+  line-height: 1.55;
+  margin: 0 0 32px 0;
+  max-width: 460px;
+}
+
+.opciones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+}
+
+.opcion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-hairline);
+  background-color: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+}
+
+.opcion:hover:not(:disabled) {
+  border-color: var(--accent-500);
+  box-shadow: var(--shadow-md);
+}
+
+.opcion:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.opcion:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.opcionTitulo {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.opcionTexto {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--ink-secondary);
+}
+
+.opcionEstado {
+  margin-top: 4px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-muted);
+}
+
+.error {
+  margin-top: 18px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+  font-size: 0.85rem;
+}
+
+.nota {
+  margin-top: 26px;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .opciones {
+    grid-template-columns: 1fr;
+  }
+}

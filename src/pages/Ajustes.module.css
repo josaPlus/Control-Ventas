@@ -1,0 +1,87 @@
+.page {
+  padding: 28px 32px 40px 32px;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pageTitle {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.pageSubtitle {
+  color: var(--ink-muted);
+  margin: 0 0 8px 0;
+}
+
+.seccion {
+  padding: 20px 22px;
+}
+
+.titulo {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  color: var(--ink-primary);
+}
+
+.descripcion {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  margin: 0 0 16px 0;
+}
+
+.opciones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.opcion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-hairline);
+  background-color: var(--surface-card);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.opcion:hover {
+  border-color: var(--border-strong);
+}
+
+/* La opción activa se marca con borde y fondo, no solo con color de texto:
+   tiene que leerse de un vistazo cuál está en uso. */
+.opcionActiva {
+  border-color: var(--accent-500);
+  background-color: var(--accent-50);
+}
+
+.opcionTitulo {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.opcionTexto {
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: var(--ink-secondary);
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 22px 18px 32px 18px;
+  }
+  .opciones {
+    grid-template-columns: 1fr;
+  }
+}

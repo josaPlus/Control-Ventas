@@ -6,12 +6,14 @@ import { formatMoney, formatDateLong } from "../lib/format";
 import Modal from "../components/Modal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import NotaVentaForm from "../components/NotaVentaForm";
+import { useConfiguracion } from "../context/ConfiguracionContext";
 import { IconPencil, IconTrash } from "../components/Icons";
 import styles from "./HistorialVentas.module.css";
 
 type FiltroEstado = "todos" | "pagado" | "pendiente";
 
 export default function HistorialVentas() {
+  const { manejaTipos } = useConfiguracion();
   const [notas, setNotas] = useState<VentaConComprador[]>([]);
   const [cargando, setCargando] = useState(true);
 
@@ -40,6 +42,12 @@ export default function HistorialVentas() {
       setCargando(false);
     }
   }
+
+  // La columna aparece si el negocio maneja tipos, pero TAMBIÉN si esta nota en
+  // concreto ya trae alguno. Así, si alguien apaga el ajuste, las ventas que
+  // sí llevaban tipo siguen mostrando lo que se vendió en vez de esconderlo.
+  const mostrarTipo =
+    manejaTipos || (notaAbierta?.detalles.some((d) => d.tipo_hilo?.trim()) ?? false);
 
   const notasFiltradas = useMemo(() => {
     return notas.filter((n) => {
@@ -288,6 +296,7 @@ export default function HistorialVentas() {
               <table className={styles.detailTable}>
                 <thead>
                   <tr>
+                    {mostrarTipo && <th>Tipo de hilo</th>}
                     <th>Color del hilo</th>
                     <th>Piñas</th>
                     <th>Precio x piña</th>
@@ -297,6 +306,7 @@ export default function HistorialVentas() {
                 <tbody>
                   {notaAbierta.detalles.map((d) => (
                     <tr key={d.id}>
+                      {mostrarTipo && <td>{d.tipo_hilo || "—"}</td>}
                       <td>{d.color_pina}</td>
                       <td>{d.cantidad_pinas}</td>
                       <td>{formatMoney(d.precio_pina)}</td>

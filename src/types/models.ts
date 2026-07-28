@@ -17,6 +17,9 @@ export interface DetalleVenta {
   color_pina: string;
   cantidad_pinas: number;
   precio_pina: number;      // double -> REAL en SQLite
+  // Opcional a nivel de app: solo lo usan los negocios que manejan varios tipos
+  // de hilo. En los demás la columna queda NULL y el campo ni se muestra.
+  tipo_hilo?: string;
   subtotal: number;         // cantidad_pinas * precio_pina, calculado en frontend
 }
 

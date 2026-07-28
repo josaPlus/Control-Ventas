@@ -1,0 +1,42 @@
+.altaFila {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.altaFila input {
+  min-width: 0;
+  flex: 1;
+}
+
+.altaBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 42px;
+  flex-shrink: 0;
+  padding: 0;
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+
+.altaBtn:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+  color: var(--ink-primary);
+  border-color: var(--border-strong);
+}
+
+.altaBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.errorText {
+  font-size: 0.72rem;
+  color: var(--status-critical);
+  margin-top: 2px;
+}

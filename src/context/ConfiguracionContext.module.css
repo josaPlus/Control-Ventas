@@ -1,0 +1,22 @@
+.pantallaCompleta {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--ink-muted);
+  font-size: 0.95rem;
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+  padding: 18px 20px;
+  border-radius: var(--radius-md);
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+  text-align: center;
+  line-height: 1.5;
+}

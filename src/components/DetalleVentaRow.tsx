@@ -1,27 +1,13 @@
 import type { DetalleVenta } from "../types/models";
 import { formatMoney } from "../lib/format";
+import SelectorCatalogo from "./SelectorCatalogo";
 import styles from "./DetalleVentaRow.module.css";
-
-// Colores de hilo más vendidos; el campo es libre, esto solo alimenta el datalist.
-export const COLORES_PINA_SUGERIDOS = [
-  "Blanco",
-  "Negro",
-  "Crudo",
-  "Rojo",
-  "Azul rey",
-  "Azul marino",
-  "Verde",
-  "Amarillo",
-  "Rosa",
-  "Gris",
-  "Beige",
-  "Café",
-];
 
 interface DetalleVentaRowErrors {
   color_pina?: string;
   cantidad_pinas?: string;
   precio_pina?: string;
+  tipo_hilo?: string;
 }
 
 interface DetalleVentaRowProps {
@@ -30,6 +16,15 @@ interface DetalleVentaRowProps {
   onRemove: () => void;
   canRemove: boolean;
   errors?: DetalleVentaRowErrors;
+  /**
+   * Depende del ajuste del negocio, no de si el catálogo tiene registros: si
+   * dependiera del catálogo, el primer tipo nunca se podría dar de alta.
+   */
+  manejaTipos: boolean;
+  colores: string[];
+  tipos: string[];
+  /** Para que el formulario relea los catálogos tras un alta desde la fila. */
+  onCatalogoActualizado: () => void | Promise<void>;
 }
 
 export default function DetalleVentaRow({
@@ -38,6 +33,10 @@ export default function DetalleVentaRow({
   onRemove,
   canRemove,
   errors,
+  manejaTipos,
+  colores,
+  tipos,
+  onCatalogoActualizado,
 }: DetalleVentaRowProps) {
   function actualizar(campo: keyof DetalleVenta, valor: string | number) {
     const siguiente: DetalleVenta = { ...detalle, [campo]: valor };
@@ -48,18 +47,28 @@ export default function DetalleVentaRow({
   }
 
   return (
-    <div className={styles.row}>
-      <div className="field">
-        <input
-          list="colores-pina"
-          className={`input ${errors?.color_pina ? "input-error" : ""}`}
-          placeholder="Color del hilo"
-          value={detalle.color_pina}
-          onChange={(e) => actualizar("color_pina", e.target.value)}
-          aria-label="Color del hilo"
+    <div className={`${styles.row} ${manejaTipos ? styles.rowConTipo : ""}`}>
+      {manejaTipos && (
+        <SelectorCatalogo
+          catalogo="tipos_hilo"
+          valor={detalle.tipo_hilo ?? ""}
+          opciones={tipos}
+          onChange={(v) => actualizar("tipo_hilo", v)}
+          onAgregado={onCatalogoActualizado}
+          placeholder="Tipo de hilo"
+          error={errors?.tipo_hilo}
         />
-        {errors?.color_pina && <span className={styles.errorText}>{errors.color_pina}</span>}
-      </div>
+      )}
+
+      <SelectorCatalogo
+        catalogo="colores_hilo"
+        valor={detalle.color_pina}
+        opciones={colores}
+        onChange={(v) => actualizar("color_pina", v)}
+        onAgregado={onCatalogoActualizado}
+        placeholder="Color del hilo"
+        error={errors?.color_pina}
+      />
 
       <div className="field">
         <input
