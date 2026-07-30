@@ -1,0 +1,89 @@
+.page {
+  padding: 28px 32px 60px 32px;
+  max-width: 860px;
+}
+
+.pageTitle {
+  font-size: 1.5rem;
+  margin-bottom: 4px;
+}
+
+.pageSubtitle {
+  color: var(--ink-muted);
+  margin: 0 0 24px 0;
+}
+
+.seccion {
+  padding: 20px 22px;
+}
+
+.titulo {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  color: var(--ink-primary);
+}
+
+.descripcion {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  margin: 0 0 18px 0;
+}
+
+/* El botón se alinea abajo para que quede a la altura de los select, no de
+   sus etiquetas. */
+.controles {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.controles :global(.field) {
+  min-width: 150px;
+}
+
+.exportarBtn {
+  min-width: 180px;
+  height: 42px;
+}
+
+.aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.87rem;
+  line-height: 1.5;
+}
+
+.avisoExito {
+  background-color: var(--status-good-bg);
+  color: var(--status-good);
+}
+
+.avisoNeutral {
+  background-color: var(--surface-sunken);
+  color: var(--ink-secondary);
+}
+
+.avisoError {
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 22px 18px 40px 18px;
+  }
+  .controles {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .exportarBtn {
+    width: 100%;
+  }
+}

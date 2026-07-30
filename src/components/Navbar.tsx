@@ -6,6 +6,7 @@ const links = [
   { to: "/nueva-venta", label: "Nueva Venta", icon: IconPlus },
   { to: "/historial", label: "Historial de Ventas", icon: IconList },
   { to: "/clientes", label: "Clientes", icon: IconUsers },
+  { to: "/reportes", label: "Reportes", icon: IconReporte },
 ];
 
 export default function Navbar() {
@@ -96,6 +97,18 @@ function IconList({ className }: { className?: string }) {
       <path d="M3 6h.01" />
       <path d="M3 12h.01" />
       <path d="M3 18h.01" />
+    </svg>
+  );
+}
+
+/* Hoja con una descarga: reporte que sale de la app hacia un archivo. */
+function IconReporte({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M12 11v6" />
+      <path d="m9 14 3 3 3-3" />
     </svg>
   );
 }

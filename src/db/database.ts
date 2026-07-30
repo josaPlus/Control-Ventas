@@ -299,3 +299,61 @@ export async function guardarConfiguracion(clave: string, valor: string): Promis
     [clave, valor]
   );
 }
+
+// EXPORTAR DATOS A EXCEL
+
+export interface FilaReporteMensual {
+  numeroNota: number;
+  fecha: string;
+  comprador: string;
+  domicilio: string;
+  telefono: string;
+  colorPina: string;
+  tipoHilo: string | null;
+  cantidadPinas: number;
+  precioPina: number;
+  subtotal: number;
+  tipoDeposito: string;
+  pagado: boolean;
+  comentario: string | null;
+}
+
+// anio: 2026, mes: 1-12
+export async function obtenerFilasReporteMensual(
+  anio: number,
+  mes: number
+): Promise<FilaReporteMensual[]> {
+  const database = await getDb();
+  const mesStr = String(mes).padStart(2, '0');
+  const desde = `${anio}-${mesStr}-01`;
+  // día 32 "desborda" al mes siguiente en formato texto ISO, así que
+  // comparamos con < inicio del mes siguiente en vez de calcular el último día
+  const anioSiguiente = mes === 12 ? anio + 1 : anio;
+  const mesSiguiente = mes === 12 ? 1 : mes + 1;
+  const hasta = `${anioSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`;
+
+  const filas = await database.select<any[]>(
+    `SELECT
+       nv.numero_nota   AS numeroNota,
+       nv.fecha         AS fecha,
+       c.comprador      AS comprador,
+       c.domicilio      AS domicilio,
+       c.telefono       AS telefono,
+       dv.color_pina    AS colorPina,
+       dv.tipo_hilo     AS tipoHilo,
+       dv.cantidad_pinas AS cantidadPinas,
+       dv.precio_pina   AS precioPina,
+       dv.subtotal      AS subtotal,
+       nv.tipo_deposito AS tipoDeposito,
+       nv.pagado        AS pagado,
+       nv.comentario    AS comentario
+     FROM notas_venta nv
+     JOIN clientes c ON c.id = nv.cliente_id
+     JOIN detalle_venta dv ON dv.nota_venta_id = nv.id
+     WHERE nv.fecha >= $1 AND nv.fecha < $2
+     ORDER BY nv.fecha ASC, nv.numero_nota ASC, dv.id ASC`,
+    [desde, hasta]
+  );
+
+  return filas.map((f) => ({ ...f, pagado: !!f.pagado }));
+}

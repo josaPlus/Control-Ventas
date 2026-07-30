@@ -11,6 +11,9 @@
     "sql:default",
     "sql:allow-execute",
     "updater:default",
-    "process:default"
+    "process:default",
+    "fs:allow-document-write-recursive",
+    "fs:allow-document-meta-recursive",
+    "dialog:allow-ask"
   ]
 }
