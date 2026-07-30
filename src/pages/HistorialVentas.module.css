@@ -275,3 +275,13 @@
   color: var(--status-critical);
   border-color: var(--status-critical);
 }
+
+.avisoRemision {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-sunken);
+  color: var(--ink-secondary);
+  font-size: 0.83rem;
+  line-height: 1.45;
+}

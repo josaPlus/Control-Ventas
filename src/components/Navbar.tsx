@@ -6,6 +6,7 @@ const links = [
   { to: "/nueva-venta", label: "Nueva Venta", icon: IconPlus },
   { to: "/historial", label: "Historial de Ventas", icon: IconList },
   { to: "/clientes", label: "Clientes", icon: IconUsers },
+  { to: "/notas-remision", label: "Notas de remisión", icon: IconRemision },
   { to: "/reportes", label: "Reportes", icon: IconReporte },
 ];
 
@@ -97,6 +98,18 @@ function IconList({ className }: { className?: string }) {
       <path d="M3 6h.01" />
       <path d="M3 12h.01" />
       <path d="M3 18h.01" />
+    </svg>
+  );
+}
+
+/* Recibo con renglones: el papel que se entrega al cliente. */
+function IconRemision({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 3h16v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" />
+      <path d="M8 8h8" />
+      <path d="M8 12h5" />
+      <path d="M4 21h16" />
     </svg>
   );
 }

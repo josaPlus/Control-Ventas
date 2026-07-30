@@ -7,7 +7,8 @@ import Modal from "../components/Modal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import NotaVentaForm from "../components/NotaVentaForm";
 import { useConfiguracion } from "../context/ConfiguracionContext";
-import { IconPencil, IconTrash } from "../components/Icons";
+import { IconPencil, IconTrash, IconRecibo } from "../components/Icons";
+import { exportarNotaDeVenta } from "../lib/exportarNotaRemision";
 import styles from "./HistorialVentas.module.css";
 
 type FiltroEstado = "todos" | "pagado" | "pendiente";
@@ -26,6 +27,8 @@ export default function HistorialVentas() {
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [editando, setEditando] = useState(false);
   const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
+  const [generandoRemision, setGenerandoRemision] = useState(false);
+  const [avisoRemision, setAvisoRemision] = useState<string | null>(null);
 
   useEffect(() => {
     cargarNotas();
@@ -71,6 +74,8 @@ export default function HistorialVentas() {
     setCargandoDetalle(true);
     setNotaAbierta(null);
     setEditando(false);
+    // Si no se limpia, el aviso de la nota anterior se vería sobre esta.
+    setAvisoRemision(null);
     try {
       const completa = await obtenerNotaCompleta(id);
       setNotaAbierta(completa);
@@ -99,6 +104,7 @@ export default function HistorialVentas() {
     setNotaAbierta(null);
     setEditando(false);
     setConfirmandoBorrado(false);
+    setAvisoRemision(null);
   }
 
   // Tras editar, se recarga el detalle para que la vista refleje lo guardado.
@@ -107,6 +113,24 @@ export default function HistorialVentas() {
     setEditando(false);
     await cargarNotas();
     await abrirDetalle(id);
+  }
+
+  async function generarRemision() {
+    setGenerandoRemision(true);
+    setAvisoRemision(null);
+    try {
+      const { exportado, ruta } = await exportarNotaDeVenta(notaAbierta!.id!, manejaTipos);
+      setAvisoRemision(
+        exportado
+          ? `Se guardó ${ruta.split("/").pop()} en Documentos / Control de Ventas / Save / Notas.`
+          : "No se reemplazó la nota anterior."
+      );
+    } catch (err) {
+      console.error(err);
+      setAvisoRemision("No se pudo generar la nota. Revisa que no esté abierta en otro programa.");
+    } finally {
+      setGenerandoRemision(false);
+    }
   }
 
   // El error se propaga a propósito: lo muestra el propio diálogo.
@@ -328,6 +352,15 @@ export default function HistorialVentas() {
                 <button
                   type="button"
                   className={`btn btn-secondary btn-sm ${styles.actionBtn}`}
+                  onClick={generarRemision}
+                  disabled={generandoRemision}
+                >
+                  <IconRecibo />
+                  {generandoRemision ? "Generando..." : "Nota de remisión"}
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-secondary btn-sm ${styles.actionBtn}`}
                   onClick={() => setEditando(true)}
                 >
                   <IconPencil />
@@ -342,6 +375,8 @@ export default function HistorialVentas() {
                   Eliminar
                 </button>
               </div>
+
+              {avisoRemision && <div className={styles.avisoRemision}>{avisoRemision}</div>}
             </>
           )}
         </Modal>

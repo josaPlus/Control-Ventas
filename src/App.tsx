@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import NuevaVenta from "./pages/NuevaVenta";
 import HistorialVentas from "./pages/HistorialVentas";
 import Clientes from "./pages/Clientes";
+import NotasRemision from "./pages/NotasRemision";
 import Reportes from "./pages/Reportes";
 import Ajustes from "./pages/Ajustes";
 import { UpdateDialog } from "./components/UpdateDialog";
@@ -41,6 +42,7 @@ function App() {
               <Route path="/nueva-venta" element={<NuevaVenta />} />
               <Route path="/historial" element={<HistorialVentas />} />
               <Route path="/clientes" element={<Clientes />} />
+              <Route path="/notas-remision" element={<NotasRemision />} />
               <Route path="/reportes" element={<Reportes />} />
               <Route path="/ajustes" element={<Ajustes />} />
             </Routes>

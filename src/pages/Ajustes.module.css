@@ -85,3 +85,43 @@
     grid-template-columns: 1fr;
   }
 }
+
+.camposNegocio {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* El domicilio es el campo más largo: ocupa el ancho completo. */
+.camposNegocio > :nth-child(2) {
+  grid-column: 1 / -1;
+}
+
+.accionesNegocio {
+  display: flex;
+  margin-top: 16px;
+}
+
+.avisoExito {
+  margin-top: 14px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--status-good-bg);
+  color: var(--status-good);
+  font-size: 0.84rem;
+}
+
+.avisoError {
+  margin-top: 14px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+  font-size: 0.84rem;
+}
+
+@media (max-width: 720px) {
+  .camposNegocio {
+    grid-template-columns: 1fr;
+  }
+}

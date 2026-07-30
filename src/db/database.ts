@@ -300,6 +300,41 @@ export async function guardarConfiguracion(clave: string, valor: string): Promis
   );
 }
 
+// ============================================
+// DATOS DEL NEGOCIO (emisor de las notas de remisión)
+// ============================================
+
+export const CLAVE_NEGOCIO_NOMBRE = 'negocio_nombre';
+export const CLAVE_NEGOCIO_DOMICILIO = 'negocio_domicilio';
+export const CLAVE_NEGOCIO_TELEFONO = 'negocio_telefono';
+
+export interface DatosNegocio {
+  nombre: string;
+  domicilio: string;
+  telefono: string;
+}
+
+// Cadena vacía cuando la clave todavía no se ha capturado: quien genera la nota
+// decide qué hacer con eso, no esta capa.
+export async function leerDatosNegocio(): Promise<DatosNegocio> {
+  const [nombre, domicilio, telefono] = await Promise.all([
+    leerConfiguracion(CLAVE_NEGOCIO_NOMBRE),
+    leerConfiguracion(CLAVE_NEGOCIO_DOMICILIO),
+    leerConfiguracion(CLAVE_NEGOCIO_TELEFONO),
+  ]);
+  return {
+    nombre: nombre ?? '',
+    domicilio: domicilio ?? '',
+    telefono: telefono ?? '',
+  };
+}
+
+export async function guardarDatosNegocio(datos: DatosNegocio): Promise<void> {
+  await guardarConfiguracion(CLAVE_NEGOCIO_NOMBRE, datos.nombre.trim());
+  await guardarConfiguracion(CLAVE_NEGOCIO_DOMICILIO, datos.domicilio.trim());
+  await guardarConfiguracion(CLAVE_NEGOCIO_TELEFONO, datos.telefono.trim());
+}
+
 // EXPORTAR DATOS A EXCEL
 
 export interface FilaReporteMensual {
