@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { useConfiguracion } from "../context/ConfiguracionContext";
 import {
   type DatosNegocio,
+  type DatosPagare,
   contarLineasConTipoHilo,
   leerDatosNegocio,
   guardarDatosNegocio,
+  leerDatosPagare,
+  guardarDatosPagare,
 } from "../db/database";
 import CatalogoEditor from "../components/CatalogoEditor";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -23,11 +26,43 @@ export default function Ajustes() {
   const [avisoNegocio, setAvisoNegocio] = useState<string | null>(null);
   const [errorNegocio, setErrorNegocio] = useState<string | null>(null);
 
+  const [pagare, setPagare] = useState<DatosPagare>({
+    activo: false,
+    beneficiario: "",
+    ciudad: "",
+    interes: "5",
+    dias: "30",
+  });
+  const [guardandoPagare, setGuardandoPagare] = useState(false);
+  const [avisoPagare, setAvisoPagare] = useState<string | null>(null);
+
   useEffect(() => {
     leerDatosNegocio()
       .then(setNegocio)
       .catch((err) => console.error(err));
+    leerDatosPagare()
+      .then(setPagare)
+      .catch((err) => console.error(err));
   }, []);
+
+  async function guardarPagare() {
+    setGuardandoPagare(true);
+    setAvisoPagare(null);
+    try {
+      await guardarDatosPagare(pagare);
+      setAvisoPagare("Datos del pagaré guardados.");
+    } catch (err) {
+      console.error(err);
+      setAvisoPagare("No se pudieron guardar. Intenta de nuevo.");
+    } finally {
+      setGuardandoPagare(false);
+    }
+  }
+
+  function actualizarPagare(campo: keyof DatosPagare, valor: string | boolean) {
+    setPagare((prev) => ({ ...prev, [campo]: valor }));
+    setAvisoPagare(null);
+  }
 
   async function guardarNegocio() {
     setGuardandoNegocio(true);
@@ -130,6 +165,105 @@ export default function Ajustes() {
 
         {avisoNegocio && <div className={styles.avisoExito}>{avisoNegocio}</div>}
         {errorNegocio && <div className={styles.avisoError}>{errorNegocio}</div>}
+      </div>
+
+      <div className={`card ${styles.seccion}`}>
+        <h3 className={styles.titulo}>Pagaré en las notas de remisión</h3>
+        <p className={styles.descripcion}>
+          Agrega al pie de la nota el texto de reconocimiento de deuda y la firma
+          del deudor, con la fecha de vencimiento calculada. <strong>Solo
+          aparece en las ventas que no están pagadas</strong>: en una venta
+          liquidada no hay nada que deber.
+        </p>
+
+        <label className={styles.interruptorPagare}>
+          <input
+            type="checkbox"
+            checked={pagare.activo}
+            onChange={(e) => actualizarPagare("activo", e.target.checked)}
+          />
+          Incluir el pagaré en las notas
+        </label>
+
+        {pagare.activo && (
+          <>
+            <div className={styles.camposNegocio}>
+              <div className="field">
+                <label className="field-label" htmlFor="pagare-beneficiario">
+                  A la orden de
+                </label>
+                <input
+                  id="pagare-beneficiario"
+                  className="input"
+                  placeholder="Nombre completo de quien cobra"
+                  value={pagare.beneficiario}
+                  onChange={(e) => actualizarPagare("beneficiario", e.target.value)}
+                />
+              </div>
+
+              <div className="field">
+                <label className="field-label" htmlFor="pagare-ciudad">
+                  Ciudad de pago
+                </label>
+                <input
+                  id="pagare-ciudad"
+                  className="input"
+                  placeholder="Ej. León, Gto."
+                  value={pagare.ciudad}
+                  onChange={(e) => actualizarPagare("ciudad", e.target.value)}
+                />
+              </div>
+
+              <div className="field">
+                <label className="field-label" htmlFor="pagare-dias">
+                  Días de plazo
+                </label>
+                <input
+                  id="pagare-dias"
+                  className="input"
+                  type="number"
+                  min={1}
+                  value={pagare.dias}
+                  onChange={(e) => actualizarPagare("dias", e.target.value)}
+                />
+              </div>
+
+              <div className="field">
+                <label className="field-label" htmlFor="pagare-interes">
+                  Interés moratorio mensual (%)
+                </label>
+                <input
+                  id="pagare-interes"
+                  className="input"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={pagare.interes}
+                  onChange={(e) => actualizarPagare("interes", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <p className={styles.nota}>
+              El texto cita el Artículo 11 de la Ley General de Títulos y
+              Operaciones de Crédito. Es un título de crédito: revisa con quien te
+              asesore que el contenido y el beneficiario sean los correctos.
+            </p>
+          </>
+        )}
+
+        <div className={styles.accionesNegocio}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={guardarPagare}
+            disabled={guardandoPagare}
+          >
+            {guardandoPagare ? "Guardando..." : "Guardar pagaré"}
+          </button>
+        </div>
+
+        {avisoPagare && <div className={styles.avisoExito}>{avisoPagare}</div>}
       </div>
 
       <div className={`card ${styles.seccion}`}>

@@ -1,6 +1,6 @@
 import { writeFile, exists, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { ask } from '@tauri-apps/plugin-dialog';
-import { obtenerNotaCompleta, leerDatosNegocio } from '../db/database';
+import { obtenerNotaCompleta, leerDatosNegocio, leerDatosPagare } from '../db/database';
 import { generarNotaRemision } from './notaRemision';
 
 const CARPETA = 'Control de Ventas/Save/Notas';
@@ -59,7 +59,7 @@ export async function exportarNotaDeVenta(
   const nota = await obtenerNotaCompleta(notaVentaId);
   if (!nota) throw new Error('La venta ya no existe.');
 
-  const negocio = await leerDatosNegocio();
+  const [negocio, pagare] = await Promise.all([leerDatosNegocio(), leerDatosPagare()]);
   await asegurarCarpeta();
 
   // Misma regla que usa el detalle del historial: la columna aparece si el
@@ -69,12 +69,14 @@ export async function exportarNotaDeVenta(
 
   const pdf = await generarNotaRemision({
     negocio,
+    pagare,
     numeroNota: nota.numero_nota,
     fecha: nota.fecha,
     cliente: nota.cliente,
     detalles: nota.detalles,
     total: nota.total_venta,
     tipoDeposito: nota.tipo_deposito,
+    pagado: nota.pagado,
     comentario: nota.comentario ?? null,
     mostrarTipoHilo,
   });
@@ -86,17 +88,20 @@ export async function exportarNotaDeVenta(
 export async function exportarNotaEnBlanco(
   manejaTipos: boolean
 ): Promise<{ exportado: boolean; ruta: string }> {
-  const negocio = await leerDatosNegocio();
+  const [negocio, pagare] = await Promise.all([leerDatosNegocio(), leerDatosPagare()]);
   await asegurarCarpeta();
 
   const pdf = await generarNotaRemision({
     negocio,
+    pagare,
     numeroNota: null,
     fecha: null,
     cliente: null,
     detalles: [],
     total: null,
     tipoDeposito: null,
+    // La plantilla en blanco es para una venta a crédito, así que lleva pagaré.
+    pagado: false,
     comentario: null,
     mostrarTipoHilo: manejaTipos,
   });

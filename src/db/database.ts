@@ -335,6 +335,53 @@ export async function guardarDatosNegocio(datos: DatosNegocio): Promise<void> {
   await guardarConfiguracion(CLAVE_NEGOCIO_TELEFONO, datos.telefono.trim());
 }
 
+// ============================================
+// PAGARÉ (bloque legal al pie de la nota)
+// ============================================
+
+export const CLAVE_PAGARE_ACTIVO = 'pagare_activo';
+export const CLAVE_PAGARE_BENEFICIARIO = 'pagare_beneficiario';
+export const CLAVE_PAGARE_CIUDAD = 'pagare_ciudad';
+export const CLAVE_PAGARE_INTERES = 'pagare_interes';
+export const CLAVE_PAGARE_DIAS = 'pagare_dias';
+
+export interface DatosPagare {
+  activo: boolean;
+  /** A cuyo nombre se suscribe. Suele ser la persona física, no el negocio. */
+  beneficiario: string;
+  ciudad: string;
+  /** Interés moratorio mensual, en por ciento. */
+  interes: string;
+  /** Días de plazo para calcular el vencimiento desde la fecha de la venta. */
+  dias: string;
+}
+
+export async function leerDatosPagare(): Promise<DatosPagare> {
+  const [activo, beneficiario, ciudad, interes, dias] = await Promise.all([
+    leerConfiguracion(CLAVE_PAGARE_ACTIVO),
+    leerConfiguracion(CLAVE_PAGARE_BENEFICIARIO),
+    leerConfiguracion(CLAVE_PAGARE_CIUDAD),
+    leerConfiguracion(CLAVE_PAGARE_INTERES),
+    leerConfiguracion(CLAVE_PAGARE_DIAS),
+  ]);
+  return {
+    activo: activo === 'si',
+    beneficiario: beneficiario ?? '',
+    ciudad: ciudad ?? '',
+    // Valores del ejemplo real que se tomó como referencia.
+    interes: interes ?? '5',
+    dias: dias ?? '30',
+  };
+}
+
+export async function guardarDatosPagare(datos: DatosPagare): Promise<void> {
+  await guardarConfiguracion(CLAVE_PAGARE_ACTIVO, datos.activo ? 'si' : 'no');
+  await guardarConfiguracion(CLAVE_PAGARE_BENEFICIARIO, datos.beneficiario.trim());
+  await guardarConfiguracion(CLAVE_PAGARE_CIUDAD, datos.ciudad.trim());
+  await guardarConfiguracion(CLAVE_PAGARE_INTERES, datos.interes.trim() || '5');
+  await guardarConfiguracion(CLAVE_PAGARE_DIAS, datos.dias.trim() || '30');
+}
+
 // EXPORTAR DATOS A EXCEL
 
 export interface FilaReporteMensual {

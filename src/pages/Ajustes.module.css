@@ -125,3 +125,21 @@
     grid-template-columns: 1fr;
   }
 }
+
+.interruptorPagare {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-primary);
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+
+.nota {
+  margin: 14px 0 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}

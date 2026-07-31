@@ -1,18 +1,26 @@
 import type { jsPDF } from 'jspdf';
 import type { DetalleVenta } from '../types/models';
-import type { DatosNegocio } from '../db/database';
-import { formatMoney, formatDateLong } from './format';
+import type { DatosNegocio, DatosPagare } from '../db/database';
+import { formatMoney } from './format';
+import { numeroALetras } from './numeroALetras';
 
 export interface DatosNotaRemision {
   negocio: DatosNegocio;
+  pagare: DatosPagare;
   /** null = nota en blanco para llenar a mano. */
   numeroNota: number | null;
   fecha: string | null;
-  cliente: { comprador: string; domicilio: string; telefono: string } | null;
+  cliente: {
+    id?: number;
+    comprador: string;
+    domicilio: string;
+    telefono: string;
+  } | null;
   /** Vacío = renglones en blanco. */
   detalles: DetalleVenta[];
   total: number | null;
   tipoDeposito: 'efectivo' | 'deposito' | null;
+  pagado: boolean;
   comentario: string | null;
   mostrarTipoHilo: boolean;
 }
@@ -23,24 +31,25 @@ const ANCHO_HOJA = 215.9;
 const ALTO_MEDIA_HOJA = 139.7;
 const MARGEN = 12;
 const ANCHO_UTIL = ANCHO_HOJA - MARGEN * 2; // 191.9 mm
+const CENTRO = ANCHO_HOJA / 2;
 
-const RENGLONES_POR_HOJA = 8;
-const ALTO_RENGLON = 6;
+// Bajó de 8 a 7 renglones para hacerle lugar al pagaré, que ocupa unos 10 mm.
+// Medido: con 7 el pagaré termina cerca de 113 mm y la firma va en 130, así que
+// aún hay holgura para un beneficiario de nombre largo que gane un renglón.
+const RENGLONES_POR_HOJA = 7;
+const ALTO_RENGLON = 5.5;
 
-// Coordenadas verticales de cada bloque. Están juntas a propósito: mover un
-// bloque obliga a ver de dónde se le quita el espacio.
-const Y_NEGOCIO = 16;
-const Y_SEPARADOR = 29;
-const Y_CLIENTE = 35;
-const Y_TABLA = 52;
-const ALTO_ENCABEZADO_TABLA = 7;
+const Y_NEGOCIO = 10;
+const Y_DATOS = 20;
+const Y_SEPARADOR = 35;
+const Y_TABLA = 38;
+const ALTO_ENCABEZADO_TABLA = 6.5;
 const Y_FIRMA = 130;
 
 const GRIS_LINEA = 150;
-// Tupla y no un solo valor: los tipos de jsPDF no exponen el atajo de escala de
-// grises para setFillColor, solo la variante de tres componentes.
+// Todo en negro y grises: la nota se imprime, muchas veces en láser B/N, y
+// además así se parece al formato de imprenta que ya usan.
 const GRIS_ENCABEZADO: [number, number, number] = [234, 234, 234];
-const ACENTO: [number, number, number] = [58, 91, 217]; // #3A5BD9, el de la app
 
 interface Columna {
   titulo: string;
@@ -49,21 +58,20 @@ interface Columna {
   alinear: 'left' | 'right';
 }
 
-// Los anchos suman ANCHO_UTIL exacto. Con tipo de hilo, el color cede espacio.
 function columnas(mostrarTipoHilo: boolean): Columna[] {
   const anchos: [string, number, 'left' | 'right'][] = mostrarTipoHilo
     ? [
-        ['Cant.', 18, 'right'],
-        ['Tipo de hilo', 34, 'left'],
-        ['Color', 72.9, 'left'],
-        ['P. unitario', 32, 'right'],
-        ['Importe', 35, 'right'],
+        ['Cantidad', 20, 'right'],
+        ['Tipo de hilo', 36, 'left'],
+        ['Descripción', 68.9, 'left'],
+        ['P/U', 30, 'right'],
+        ['Importe', 37, 'right'],
       ]
     : [
-        ['Cant.', 20, 'right'],
-        ['Color del hilo', 104.9, 'left'],
-        ['P. unitario', 32, 'right'],
-        ['Importe', 35, 'right'],
+        ['Cantidad', 22, 'right'],
+        ['Descripción', 102.9, 'left'],
+        ['P/U', 30, 'right'],
+        ['Importe', 37, 'right'],
       ];
 
   let x = MARGEN;
@@ -74,8 +82,6 @@ function columnas(mostrarTipoHilo: boolean): Columna[] {
   });
 }
 
-// Recorta el texto que no quepa en su celda. Sin esto, un color con nombre
-// largo se derramaría encima de la columna siguiente.
 function recortar(doc: jsPDF, texto: string, anchoMax: number): string {
   if (doc.getTextWidth(texto) <= anchoMax) return texto;
   let corto = texto;
@@ -83,13 +89,6 @@ function recortar(doc: jsPDF, texto: string, anchoMax: number): string {
     corto = corto.slice(0, -1);
   }
   return corto + '...';
-}
-
-function lineaPunteada(doc: jsPDF, y: number) {
-  doc.setDrawColor(GRIS_LINEA);
-  doc.setLineDashPattern([1.5, 1.5], 0);
-  doc.line(0, y, ANCHO_HOJA, y);
-  doc.setLineDashPattern([], 0);
 }
 
 function textoEnCelda(doc: jsPDF, valor: string, col: Columna, y: number) {
@@ -103,103 +102,111 @@ function textoEnCelda(doc: jsPDF, valor: string, col: Columna, y: number) {
   }
 }
 
-/** Bloque del emisor, título y folio. Devuelve nada: escribe en posiciones fijas. */
+function fechaCorta(iso: string): string {
+  const [a, m, d] = iso.split('-');
+  return `${d}/${m}/${a}`;
+}
+
+/** Suma días naturales a una fecha ISO y devuelve el resultado en ISO. */
+export function sumarDias(iso: string, dias: number): string {
+  const [a, m, d] = iso.split('-').map(Number);
+  const fecha = new Date(a, m - 1, d);
+  fecha.setDate(fecha.getDate() + dias);
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  const dia = String(fecha.getDate()).padStart(2, '0');
+  return `${fecha.getFullYear()}-${mes}-${dia}`;
+}
+
 function dibujarEncabezado(
   doc: jsPDF,
   datos: DatosNotaRemision,
   hoja: number,
   totalHojas: number
 ) {
-  const { negocio, numeroNota } = datos;
+  const { negocio, cliente, numeroNota, fecha, pagare } = datos;
 
-  // Si no hay nombre de negocio capturado, se omite el bloque entero en vez de
-  // dejar un hueco o un texto de relleno.
+  // Nombre del negocio centrado, como en las notas de remisión de imprenta.
   if (negocio.nombre) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     doc.setTextColor(0);
-    doc.text(recortar(doc, negocio.nombre, 120), MARGEN, Y_NEGOCIO);
+    doc.text(recortar(doc, negocio.nombre, ANCHO_UTIL), CENTRO, Y_NEGOCIO, { align: 'center' });
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(70);
-    let y = Y_NEGOCIO + 4.5;
-    if (negocio.domicilio) {
-      doc.text(recortar(doc, negocio.domicilio, 120), MARGEN, y);
-      y += 4;
-    }
-    if (negocio.telefono) {
-      doc.text(`Tel. ${negocio.telefono}`, MARGEN, y);
+    const contacto = [negocio.domicilio, negocio.telefono && `Tel. ${negocio.telefono}`]
+      .filter(Boolean)
+      .join('  ·  ');
+    if (contacto) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(80);
+      doc.text(recortar(doc, contacto, ANCHO_UTIL), CENTRO, Y_NEGOCIO + 4.5, { align: 'center' });
     }
   }
 
-  const derecha = ANCHO_HOJA - MARGEN;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(...ACENTO);
-  doc.text('NOTA DE REMISIÓN', derecha, Y_NEGOCIO, { align: 'right' });
-
-  doc.setFontSize(10);
+  // ---- Bloque izquierdo: cliente ----
+  const relleno = '__________________________________';
   doc.setTextColor(0);
-  const folio = numeroNota !== null ? `N° ${numeroNota}` : 'N° ________';
-  doc.text(folio, derecha, Y_NEGOCIO + 5.5, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+
+  const numeroCliente = cliente?.id != null ? `( ${cliente.id} )  ` : '';
+  doc.text(
+    recortar(doc, cliente ? `${numeroCliente}${cliente.comprador}` : relleno, 110),
+    MARGEN,
+    Y_DATOS
+  );
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.text(
+    recortar(doc, `Calle: ${cliente ? cliente.domicilio : relleno}`, 110),
+    MARGEN,
+    Y_DATOS + 5
+  );
+  doc.text(
+    recortar(doc, `Tel: ${cliente ? cliente.telefono : '________________'}`, 110),
+    MARGEN,
+    Y_DATOS + 10
+  );
+
+  // ---- Bloque derecho: folio, fechas ----
+  const etiquetaX = ANCHO_HOJA - MARGEN - 42;
+  const valorX = ANCHO_HOJA - MARGEN;
+  let y = Y_DATOS - 5;
+
+  const renglones: [string, string][] = [
+    ['NO DOCTO.', numeroNota !== null ? `R-${numeroNota}` : '____________'],
+    ['Fecha:', fecha ? fechaCorta(fecha) : '____________'],
+  ];
+
+  // El vencimiento solo tiene sentido si hay un pagaré que venza.
+  if (pagare.activo) {
+    const dias = Number(pagare.dias) || 30;
+    renglones.push([
+      'Vencimiento:',
+      fecha ? fechaCorta(sumarDias(fecha, dias)) : '____________',
+    ]);
+  }
+
+  for (const [etiqueta, valor] of renglones) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text(etiqueta, etiquetaX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(valor, valorX, y, { align: 'right' });
+    y += 5;
+  }
 
   if (totalHojas > 1) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(110);
-    doc.text(`Hoja ${hoja} de ${totalHojas}`, derecha, Y_NEGOCIO + 10, { align: 'right' });
+    doc.text(`Hoja ${hoja} de ${totalHojas}`, valorX, y, { align: 'right' });
   }
 
   doc.setDrawColor(GRIS_LINEA);
   doc.setLineWidth(0.3);
   doc.line(MARGEN, Y_SEPARADOR, ANCHO_HOJA - MARGEN, Y_SEPARADOR);
-}
-
-function dibujarCliente(doc: jsPDF, datos: DatosNotaRemision) {
-  const { cliente, fecha, tipoDeposito } = datos;
-  const enBlanco = cliente === null;
-  const relleno = '______________________________';
-
-  const filas: [string, string][] = [
-    ['Cliente:', enBlanco ? relleno : cliente.comprador],
-    ['Domicilio:', enBlanco ? relleno : cliente.domicilio],
-    ['Teléfono:', enBlanco ? relleno : cliente.telefono],
-  ];
-
-  let y = Y_CLIENTE;
-  for (const [etiqueta, valor] of filas) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(0);
-    doc.text(etiqueta, MARGEN, y);
-
-    doc.setFont('helvetica', 'normal');
-    doc.text(recortar(doc, valor, 95), MARGEN + 20, y);
-    y += 5.5;
-  }
-
-  // Columna derecha: fecha y forma de pago.
-  const derecha = ANCHO_HOJA - MARGEN;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text('Fecha:', derecha - 40, Y_CLIENTE);
-  doc.setFont('helvetica', 'normal');
-  doc.text(fecha ? formatDateLong(fecha) : '____________', derecha, Y_CLIENTE, {
-    align: 'right',
-  });
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('Pago:', derecha - 40, Y_CLIENTE + 5.5);
-  doc.setFont('helvetica', 'normal');
-  const pago =
-    tipoDeposito === null
-      ? '____________'
-      : tipoDeposito === 'efectivo'
-        ? 'Efectivo'
-        : 'Depósito';
-  doc.text(pago, derecha, Y_CLIENTE + 5.5, { align: 'right' });
 }
 
 /** Devuelve la y donde terminó la tabla. */
@@ -209,7 +216,6 @@ function dibujarTabla(
   lineas: DetalleVenta[],
   mostrarTipoHilo: boolean
 ): number {
-  // Encabezado con fondo gris: es más barato de imprimir que un color sólido.
   doc.setFillColor(...GRIS_ENCABEZADO);
   doc.rect(MARGEN, Y_TABLA, ANCHO_UTIL, ALTO_ENCABEZADO_TABLA, 'F');
   doc.setDrawColor(GRIS_LINEA);
@@ -217,9 +223,9 @@ function dibujarTabla(
   doc.rect(MARGEN, Y_TABLA, ANCHO_UTIL, ALTO_ENCABEZADO_TABLA);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setTextColor(0);
-  const yTituloCol = Y_TABLA + ALTO_ENCABEZADO_TABLA - 2.4;
+  const yTituloCol = Y_TABLA + ALTO_ENCABEZADO_TABLA - 2.2;
   for (const col of cols) {
     textoEnCelda(doc, col.titulo, col, yTituloCol);
     if (col.x > MARGEN) {
@@ -227,11 +233,9 @@ function dibujarTabla(
     }
   }
 
-  // Siempre se dibujan RENGLONES_POR_HOJA marcos: en una nota en blanco son los
-  // renglones para escribir, y en una con pocas líneas dan cuerpo a la tabla.
   let y = Y_TABLA + ALTO_ENCABEZADO_TABLA;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
 
   for (let i = 0; i < RENGLONES_POR_HOJA; i++) {
     doc.rect(MARGEN, y, ANCHO_UTIL, ALTO_RENGLON);
@@ -241,18 +245,19 @@ function dibujarTabla(
 
     const linea = lineas[i];
     if (linea) {
-      const yTexto = y + ALTO_RENGLON - 1.9;
+      const yTexto = y + ALTO_RENGLON - 1.7;
+      const descripcion = `Piñas de hilo color ${linea.color_pina}`;
       const valores = mostrarTipoHilo
         ? [
             String(linea.cantidad_pinas),
             linea.tipo_hilo ?? '',
-            linea.color_pina,
+            descripcion,
             formatMoney(linea.precio_pina),
             formatMoney(linea.subtotal),
           ]
         : [
             String(linea.cantidad_pinas),
-            linea.color_pina,
+            descripcion,
             formatMoney(linea.precio_pina),
             formatMoney(linea.subtotal),
           ];
@@ -265,55 +270,113 @@ function dibujarTabla(
   return y;
 }
 
-function dibujarPie(
+/** Totales e importe en letra. Devuelve la y donde terminó. */
+function dibujarTotales(
   doc: jsPDF,
   datos: DatosNotaRemision,
   cols: Columna[],
-  yTabla: number,
-  esUltimaHoja: boolean
-) {
+  yTabla: number
+): number {
   const ultima = cols[cols.length - 1];
+  const unidades = datos.detalles.reduce((acc, d) => acc + d.cantidad_pinas, 0);
 
-  if (esUltimaHoja) {
-    const altoTotal = 7.5;
-    doc.setFillColor(...GRIS_ENCABEZADO);
-    doc.rect(ultima.x - 32, yTabla, 32 + ultima.ancho, altoTotal, 'F');
-    doc.setDrawColor(GRIS_LINEA);
-    doc.rect(ultima.x - 32, yTabla, 32 + ultima.ancho, altoTotal);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(60);
+  doc.text(
+    `Total de Unidades: ${datos.detalles.length > 0 ? unidades.toFixed(2) : '________'}`,
+    MARGEN,
+    yTabla + 5
+  );
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(0);
-    doc.text('TOTAL', ultima.x - 30, yTabla + altoTotal - 2.5);
-    doc.text(
-      datos.total !== null ? formatMoney(datos.total) : '____________',
-      ultima.x + ultima.ancho - 1.8,
-      yTabla + altoTotal - 2.5,
-      { align: 'right' }
-    );
+  const altoTotal = 7;
+  doc.setFillColor(...GRIS_ENCABEZADO);
+  doc.rect(ultima.x - 30, yTabla + 0.5, 30 + ultima.ancho, altoTotal, 'F');
+  doc.setDrawColor(GRIS_LINEA);
+  doc.rect(ultima.x - 30, yTabla + 0.5, 30 + ultima.ancho, altoTotal);
 
-    if (datos.comentario) {
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(7.5);
-      doc.setTextColor(70);
-      doc.text(
-        recortar(doc, `Observaciones: ${datos.comentario}`, ANCHO_UTIL),
-        MARGEN,
-        yTabla + altoTotal + 5
-      );
-    }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(0);
+  doc.text('Total', ultima.x - 28, yTabla + altoTotal - 1.5);
+  doc.text(
+    datos.total !== null ? formatMoney(datos.total) : '____________',
+    ultima.x + ultima.ancho - 1.8,
+    yTabla + altoTotal - 1.5,
+    { align: 'right' }
+  );
+
+  let y = yTabla + altoTotal + 6;
+
+  // El importe en letra es lo que impide que alguien altere la cifra.
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(0);
+  const letras =
+    datos.total !== null
+      ? numeroALetras(datos.total)
+      : '__________________________________________________ PESOS ___/100 M.N.';
+  doc.text(recortar(doc, letras, ANCHO_UTIL), MARGEN, y);
+  y += 4.5;
+
+  if (datos.comentario) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(80);
+    doc.text(recortar(doc, `Observaciones: ${datos.comentario}`, ANCHO_UTIL), MARGEN, y);
+    y += 4;
   }
 
-  // Firma de quien recibe: es lo que convierte el papel en acuse de entrega.
-  doc.setDrawColor(120);
-  doc.setLineWidth(0.3);
-  doc.line(ANCHO_HOJA - MARGEN - 62, Y_FIRMA, ANCHO_HOJA - MARGEN, Y_FIRMA);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(70);
-  doc.text('Recibí conforme', ANCHO_HOJA - MARGEN - 31, Y_FIRMA + 4, { align: 'center' });
+  return y;
+}
 
-  lineaPunteada(doc, ALTO_MEDIA_HOJA);
+function dibujarPagare(doc: jsPDF, datos: DatosNotaRemision, yInicio: number) {
+  const { pagare, fecha, total } = datos;
+  const dias = Number(pagare.dias) || 30;
+  const vencimiento = fecha ? fechaCorta(sumarDias(fecha, dias)) : '____________';
+  const importe = total !== null ? numeroALetras(total) : '____________________';
+  const beneficiario = pagare.beneficiario || '____________________';
+  const ciudad = pagare.ciudad || '____________';
+  const interes = pagare.interes || '5';
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(0);
+  doc.text('PAGARÉ', MARGEN, yInicio);
+
+  const cuerpo =
+    `Debo(emos) y pagaré(mos) a la orden de ${beneficiario} el día ${vencimiento} en la ciudad de ${ciudad} ` +
+    `la cantidad de ${importe} Valor recibido a mi (nuestra) entera satisfacción. En caso de no pagarse en la ` +
+    `fecha indicada causará un interés moratorio del ${interes}% mensual pagadero conjuntamente con el adeudo ` +
+    `principal con su total liquidación. Asimismo me obligo incondicionalmente a pagar el importe de este pagaré ` +
+    `y sus accesorios aun y cuando fueran aceptados en mi nombre y representación por empleado o dependiente de ` +
+    `mi negocio, conforme al Artículo 11 de la Ley General de Títulos y Operaciones de Crédito.`;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5.6);
+  doc.setTextColor(40);
+  const lineas = doc.splitTextToSize(cuerpo, ANCHO_UTIL) as string[];
+  doc.text(lineas, MARGEN, yInicio + 3.2);
+}
+
+function dibujarFirma(doc: jsPDF, etiqueta: string) {
+  doc.setDrawColor(90);
+  doc.setLineWidth(0.3);
+  doc.line(CENTRO - 35, Y_FIRMA, CENTRO + 35, Y_FIRMA);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(40);
+  doc.text(etiqueta, CENTRO, Y_FIRMA + 3.8, { align: 'center' });
+}
+
+function dibujarCorte(doc: jsPDF) {
+  doc.setDrawColor(GRIS_LINEA);
+  doc.setLineWidth(0.2);
+  doc.setLineDashPattern([1.5, 1.5], 0);
+  doc.line(0, ALTO_MEDIA_HOJA, ANCHO_HOJA, ALTO_MEDIA_HOJA);
+  doc.setLineDashPattern([], 0);
+
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(6);
   doc.setTextColor(140);
   doc.text('corte aquí', MARGEN, ALTO_MEDIA_HOJA - 1.5);
@@ -327,8 +390,11 @@ export async function generarNotaRemision(datos: DatosNotaRemision): Promise<Uin
   const doc = new JsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
   const cols = columnas(datos.mostrarTipoHilo);
 
-  // Una venta con muchas líneas se reparte en varias hojas en vez de comprimir
-  // renglones o truncar líneas. Cada hoja respeta la regla de la media hoja.
+  // El pagaré es un reconocimiento de deuda: no tiene por qué aparecer en una
+  // venta que ya está pagada. La nota en blanco sí lo lleva, porque es la
+  // plantilla para una venta a crédito.
+  const conPagare = datos.pagare.activo && !datos.pagado;
+
   const paginas: DetalleVenta[][] = [];
   if (datos.detalles.length === 0) {
     paginas.push([]);
@@ -343,9 +409,19 @@ export async function generarNotaRemision(datos: DatosNotaRemision): Promise<Uin
     const esUltima = i === paginas.length - 1;
 
     dibujarEncabezado(doc, datos, i + 1, paginas.length);
-    dibujarCliente(doc, datos);
     const yTabla = dibujarTabla(doc, cols, lineas, datos.mostrarTipoHilo);
-    dibujarPie(doc, datos, cols, yTabla, esUltima);
+
+    if (esUltima) {
+      const yTotales = dibujarTotales(doc, datos, cols, yTabla);
+      if (conPagare) {
+        dibujarPagare(doc, datos, yTotales + 2);
+        dibujarFirma(doc, 'FIRMA DEL DEUDOR');
+      } else {
+        dibujarFirma(doc, 'Recibí conforme');
+      }
+    }
+
+    dibujarCorte(doc);
   });
 
   return new Uint8Array(doc.output('arraybuffer'));
