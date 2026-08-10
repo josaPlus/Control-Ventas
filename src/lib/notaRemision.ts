@@ -144,14 +144,15 @@ function dibujarEncabezado(
   }
 
   // ---- Bloque izquierdo: cliente ----
-  const relleno = '__________________________________';
+  const rellenoCliente = '(        )__________________________________';
+  const relleno = '__________________________________'
   doc.setTextColor(0);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
 
   const numeroCliente = cliente?.id != null ? `( ${cliente.id} )  ` : '';
   doc.text(
-    recortar(doc, cliente ? `${numeroCliente}${cliente.comprador}` : relleno, 110),
+    recortar(doc, cliente ? `${numeroCliente}${cliente.comprador}` : rellenoCliente, 110),
     MARGEN,
     Y_DATOS
   );
