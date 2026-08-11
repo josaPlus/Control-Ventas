@@ -1,6 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 import { invoke } from '@tauri-apps/api/core';
 import type { Cliente, NotaVenta, DetalleVenta, NotaVentaCompleta } from '../types/models';
+import { sumarDias } from '../lib/semanas';
 
 // Se memoiza la promesa, no la conexión ya resuelta. Si se guardara la
 // conexión, dos llamadas simultáneas al arrancar la app verían ambas el valor
@@ -318,19 +319,13 @@ export interface FilaReporteMensual {
   comentario: string | null;
 }
 
-// anio: 2026, mes: 1-12
-export async function obtenerFilasReporteMensual(
-  anio: number,
-  mes: number
+// Rango semiabierto [desde, hasta) en formato 'YYYY-MM-DD'. Es la base de los
+// reportes mensuales y semanales: sólo cambia el rango que se le pasa.
+export async function obtenerFilasReportePorRango(
+  desde: string,
+  hasta: string
 ): Promise<FilaReporteMensual[]> {
   const database = await getDb();
-  const mesStr = String(mes).padStart(2, '0');
-  const desde = `${anio}-${mesStr}-01`;
-  // día 32 "desborda" al mes siguiente en formato texto ISO, así que
-  // comparamos con < inicio del mes siguiente en vez de calcular el último día
-  const anioSiguiente = mes === 12 ? anio + 1 : anio;
-  const mesSiguiente = mes === 12 ? 1 : mes + 1;
-  const hasta = `${anioSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`;
 
   const filas = await database.select<any[]>(
     `SELECT
@@ -356,4 +351,27 @@ export async function obtenerFilasReporteMensual(
   );
 
   return filas.map((f) => ({ ...f, pagado: !!f.pagado }));
+}
+
+// anio: 2026, mes: 1-12
+export async function obtenerFilasReporteMensual(
+  anio: number,
+  mes: number
+): Promise<FilaReporteMensual[]> {
+  const mesStr = String(mes).padStart(2, '0');
+  const desde = `${anio}-${mesStr}-01`;
+  // día 32 "desborda" al mes siguiente en formato texto ISO, así que
+  // comparamos con < inicio del mes siguiente en vez de calcular el último día
+  const anioSiguiente = mes === 12 ? anio + 1 : anio;
+  const mesSiguiente = mes === 12 ? 1 : mes + 1;
+  const hasta = `${anioSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`;
+
+  return obtenerFilasReportePorRango(desde, hasta);
+}
+
+// lunesIso: lunes de la semana, 'YYYY-MM-DD'. Cubre lunes a domingo.
+export async function obtenerFilasReporteSemanal(
+  lunesIso: string
+): Promise<FilaReporteMensual[]> {
+  return obtenerFilasReportePorRango(lunesIso, sumarDias(lunesIso, 7));
 }
