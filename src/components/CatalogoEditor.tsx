@@ -7,6 +7,7 @@ import {
   renombrarEntradaCatalogo,
   eliminarEntradaCatalogo,
 } from "../db/database";
+import { useSesion } from "../context/SesionContext";
 import Modal from "./Modal";
 import ConfirmDialog from "./ConfirmDialog";
 import { IconPencil, IconTrash } from "./Icons";
@@ -34,6 +35,8 @@ export default function CatalogoEditor({
   singular,
 }: CatalogoEditorProps) {
   const [entradas, setEntradas] = useState<string[]>([]);
+  const { revisionDatos } = useSesion();
+
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -46,9 +49,11 @@ export default function CatalogoEditor({
   const [agregando, setAgregando] = useState(false);
   const [nombreAlta, setNombreAlta] = useState("");
 
+  // También depende de revisionDatos: el catálogo se acota por sesión, así que
+  // al entrar, salir o adoptar datos locales la lista que se edita es otra.
   useEffect(() => {
     cargar();
-  }, [catalogo]);
+  }, [catalogo, revisionDatos]);
 
   async function cargar() {
     setCargando(true);

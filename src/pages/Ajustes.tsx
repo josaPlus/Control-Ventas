@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useConfiguracion } from "../context/ConfiguracionContext";
 import { contarLineasConTipoHilo } from "../db/database";
+import AdopcionDatosLocales from "../components/AdopcionDatosLocales";
 import CatalogoEditor from "../components/CatalogoEditor";
 import ConfirmDialog from "../components/ConfirmDialog";
 import styles from "./Ajustes.module.css";
@@ -59,6 +60,9 @@ export default function Ajustes() {
           </button>
         </div>
       </div>
+
+      {/* Se pinta sola solo si hay sesión y algo sin dueño que asociar. */}
+      <AdopcionDatosLocales />
 
       <CatalogoEditor
         catalogo="colores_hilo"

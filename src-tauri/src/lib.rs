@@ -1,14 +1,22 @@
+mod auth;
 mod catalogos;
 mod clientes;
+mod configuracion;
 mod db;
 mod migrations;
+mod sync;
 mod ventas;
 
+use auth::{
+    adoptar_datos_locales, cerrar_sesion, contar_datos_locales, iniciar_sesion, registrar_usuario,
+    usuario_actual, EstadoSesion,
+};
+use configuracion::{guardar_configuracion, leer_configuracion};
 use catalogos::{
-    agregar_entrada_catalogo, contar_uso_en_ventas, eliminar_entrada_catalogo,
+    agregar_entrada_catalogo, contar_uso_en_ventas, eliminar_entrada_catalogo, leer_catalogo,
     renombrar_entrada_catalogo,
 };
-use clientes::eliminar_cliente;
+use clientes::{actualizar_cliente, crear_cliente, eliminar_cliente};
 use tauri::Manager; // NUEVO: necesario para app.path()
 use ventas::{actualizar_nota_venta, crear_nota_venta, eliminar_nota_venta};
 
@@ -47,6 +55,11 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_fs::init()) // NUEVO
         .plugin(tauri_plugin_dialog::init()) // NUEVO
+        // Sesión en memoria. Arranca vacía en cada ejecución; si había una
+        // sesión recordada, se recupera de `configuracion` la primera vez que
+        // alguien pregunte (ver auth::usuario_id_de_sesion). No se hace aquí
+        // porque en el setup la base todavía no terminó de migrar.
+        .manage(EstadoSesion::new(None))
         .setup(|app| {
             // NUEVO: se corre una vez al arrancar la app
             if let Err(e) = asegurar_carpeta_save(app.handle()) {
@@ -59,11 +72,22 @@ pub fn run() {
             crear_nota_venta,
             actualizar_nota_venta,
             eliminar_nota_venta,
+            crear_cliente,
+            actualizar_cliente,
             eliminar_cliente,
             agregar_entrada_catalogo,
             contar_uso_en_ventas,
             renombrar_entrada_catalogo,
-            eliminar_entrada_catalogo
+            eliminar_entrada_catalogo,
+            leer_catalogo,
+            registrar_usuario,
+            iniciar_sesion,
+            cerrar_sesion,
+            usuario_actual,
+            contar_datos_locales,
+            adoptar_datos_locales,
+            leer_configuracion,
+            guardar_configuracion
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

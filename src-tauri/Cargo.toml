@@ -14,6 +14,11 @@ edition = "2021"
 name = "control_ventas_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[dev-dependencies]
+# Solo para los #[tokio::test] que ejercitan las funciones async contra una
+# SQLite en memoria. No entra en el binario que se distribuye.
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -29,4 +34,12 @@ tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-fs = "2.5.1"
 tauri-plugin-dialog = "2.7.2"
+# Identidad de las filas para el futuro servidor central. v4 = aleatorio, que
+# es lo correcto aquí: no queremos que el id revele fecha ni orden de alta.
+uuid = { version = "1", features = ["v4"] }
+# Hash de contraseñas. Argon2id es el default del crate y el recomendado hoy
+# para contraseñas de usuario. La sal va dentro del propio string PHC, por eso
+# no hay columna aparte para ella.
+# La feature "std" es la que habilita OsRng (vía getrandom) para generar la sal.
+argon2 = { version = "0.5", features = ["std"] }
 

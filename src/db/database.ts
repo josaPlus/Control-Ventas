@@ -20,13 +20,17 @@ export async function getDb(): Promise<Database> {
 // CLIENTES
 // ============================================
 
+// El alta pasa por Rust y no por un INSERT directo: la fila necesita
+// usuario_id y sync_estado, y quién tiene la sesión abierta solo se sabe de
+// aquel lado. Sin sesión, el cliente queda local, igual que siempre.
 export async function crearCliente(cliente: Cliente): Promise<number> {
-  const database = await getDb();
-  const result = await database.execute(
-    'INSERT INTO clientes (comprador, domicilio, telefono) VALUES ($1, $2, $3)',
-    [cliente.comprador, cliente.domicilio, cliente.telefono]
-  );
-  return result.lastInsertId!;
+  return await invoke<number>('crear_cliente', {
+    cliente: {
+      comprador: cliente.comprador,
+      domicilio: cliente.domicilio,
+      telefono: cliente.telefono,
+    },
+  });
 }
 
 export async function listarClientes(): Promise<Cliente[]> {
@@ -45,12 +49,18 @@ export async function buscarClientes(texto: string): Promise<Cliente[]> {
   );
 }
 
+// También por Rust: además de guardar, vuelve a poner la fila en la cola de
+// sincronización. usuario_id no se toca — el cliente conserva a quien lo dio
+// de alta aunque lo edite otra sesión.
 export async function actualizarCliente(cliente: Cliente): Promise<void> {
-  const database = await getDb();
-  await database.execute(
-    'UPDATE clientes SET comprador = $1, domicilio = $2, telefono = $3 WHERE id = $4',
-    [cliente.comprador, cliente.domicilio, cliente.telefono, cliente.id]
-  );
+  await invoke('actualizar_cliente', {
+    clienteId: cliente.id,
+    cliente: {
+      comprador: cliente.comprador,
+      domicilio: cliente.domicilio,
+      telefono: cliente.telefono,
+    },
+  });
 }
 
 // Sólo se puede borrar un cliente que no tenga ventas registradas. Si las
@@ -205,16 +215,13 @@ export async function actualizarEstadoPago(
 export type Catalogo = 'colores_hilo' | 'tipos_hilo';
 
 // Los catálogos se llenan solos al guardar una venta (lo hace Rust, dentro de
-// la transacción). Aquí solo se leen, para alimentar las sugerencias.
+// la transacción).
 //
-// El nombre de tabla se interpola porque SQL no permite bindearlo como
-// parámetro; el tipo Catalogo es lo que lo mantiene acotado.
+// La lectura también pasa por Rust desde la v4: el catálogo tiene alcance por
+// usuario, y un SELECT sin filtrar mezclaría las entradas de todos. Rust acota
+// por la sesión activa, o por el catálogo local cuando no hay sesión.
 export async function leerCatalogo(catalogo: Catalogo): Promise<string[]> {
-  const database = await getDb();
-  const filas = await database.select<{ nombre: string }[]>(
-    `SELECT nombre FROM ${catalogo} ORDER BY nombre COLLATE NOCASE ASC`
-  );
-  return filas.map((f) => f.nombre);
+  return await invoke<string[]>('leer_catalogo', { catalogo });
 }
 
 // Da de alta una entrada a mano. Devuelve el nombre ya normalizado, que es el
@@ -272,13 +279,12 @@ export async function contarLineasConTipoHilo(): Promise<number> {
 // formulario de venta. Ausente = todavía no se ha configurado la app.
 export const CLAVE_MANEJA_TIPOS = 'maneja_tipos_hilo';
 
+// Desde la v4 configuracion tiene alcance por usuario, así que la consulta ya
+// no puede vivir aquí con un usuario_id fijo: en cuanto se adoptan los datos
+// locales, la fila cambia de alcance. Rust lee el de la sesión y cae al local
+// si esa cuenta todavía no tiene valor propio.
 export async function leerConfiguracion(clave: string): Promise<string | null> {
-  const database = await getDb();
-  const filas = await database.select<{ valor: string }[]>(
-    'SELECT valor FROM configuracion WHERE clave = $1',
-    [clave]
-  );
-  return filas.length > 0 ? filas[0].valor : null;
+  return await invoke<string | null>('leer_configuracion', { clave });
 }
 
 // Distingue una instalación recién estrenada de una que ya venía funcionando.
@@ -292,13 +298,11 @@ export async function baseTieneDatos(): Promise<boolean> {
   return (filas[0]?.total ?? 0) > 0;
 }
 
+// Guarda en el alcance de quien esté operando. El ON CONFLICT no es el mismo
+// con sesión que sin ella (PK compuesta vs. índice parcial), y esa decisión
+// necesita saber quién está logueado, así que vive en Rust.
 export async function guardarConfiguracion(clave: string, valor: string): Promise<void> {
-  const database = await getDb();
-  await database.execute(
-    `INSERT INTO configuracion (clave, valor) VALUES ($1, $2)
-     ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor`,
-    [clave, valor]
-  );
+  await invoke('guardar_configuracion', { clave, valor });
 }
 
 // EXPORTAR DATOS A EXCEL
