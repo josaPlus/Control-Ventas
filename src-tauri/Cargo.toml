@@ -42,4 +42,19 @@ uuid = { version = "1", features = ["v4"] }
 # no hay columna aparte para ella.
 # La feature "std" es la que habilita OsRng (vía getrandom) para generar la sal.
 argon2 = { version = "0.5", features = ["std"] }
+# Cliente HTTP para el login remoto. Misma versión que ya arrastra
+# tauri-plugin-updater, para no compilar dos copias de reqwest.
+# rustls en vez de schannel/openssl: una sola implementación de TLS en todas
+# las plataformas, sin depender de lo que tenga instalado la PC.
+# webpki-roots trae los certificados raíz dentro del binario: el día que el
+# servidor esté en HTTPS, no dependemos de qué tenga instalado la PC del
+# cliente ni de que Windows tenga el almacén actualizado.
+reqwest = { version = "0.13", default-features = false, features = [
+    "json",
+    "rustls",
+    "webpki-roots",
+] }
+# El JWT se guarda en el almacén de credenciales del sistema operativo
+# (Credential Manager en Windows), NO en la base ni en el WebView.
+keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 

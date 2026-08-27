@@ -17,7 +17,7 @@ interface NavbarProps {
 }
 
 export default function Navbar({ onIniciarSesion }: NavbarProps) {
-  const { usuario, cerrarSesion } = useSesion();
+  const { usuario, conexion, cerrarSesion } = useSesion();
 
   return (
     <aside className={styles.sidebar}>
@@ -75,6 +75,23 @@ export default function Navbar({ onIniciarSesion }: NavbarProps) {
                 <span className={styles.usuarioRol}>{usuario.rol}</span>
               </div>
             </div>
+
+            {/* Informativo, no una alarma: en modo local la app funciona
+                completa. Solo dice de dónde vino la validación. */}
+            {conexion && (
+              <span
+                className={`${styles.conexion} ${
+                  conexion.modo === "remoto" ? styles.conexionRemota : styles.conexionLocal
+                }`}
+                title={
+                  conexion.modo === "remoto"
+                    ? `Sesión verificada con ${conexion.api_url}`
+                    : "Sesión validada en esta computadora. Todo funciona igual."
+                }
+              >
+                {conexion.modo === "remoto" ? "Conectado al servidor" : "Solo esta PC"}
+              </span>
+            )}
             <button type="button" className={styles.sesionBtn} onClick={cerrarSesion}>
               Cerrar sesión
             </button>

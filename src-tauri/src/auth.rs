@@ -21,19 +21,65 @@ use tauri_plugin_sql::DbInstances;
 use uuid::Uuid;
 
 use crate::db::obtener_pool;
+use crate::token::EstadoToken;
 
 /// Sesión en memoria. `None` = nadie ha iniciado sesión en esta corrida.
 ///
 /// Es `Option<Option<String>>` por dentro? No: un solo `Option`. El caso "ya
 /// miré en la base y no había nada" no se distingue de "no he mirado", y está
 /// bien — releer una fila de `configuracion` es barato y pasa una vez.
-pub type EstadoSesion = Mutex<Option<String>>;
+///
+/// Tiene que ser un tipo PROPIO, no un `type EstadoSesion = Mutex<...>`:
+/// Tauri indexa el state por TypeId, y como `EstadoToken` guarda exactamente
+/// lo mismo por dentro, dos alias serían el mismo tipo y el segundo
+/// `.manage()` revienta con "state for type ... is already being managed".
+pub struct EstadoSesion(Mutex<Option<String>>);
+
+impl EstadoSesion {
+    pub fn nueva() -> Self {
+        Self(Mutex::new(None))
+    }
+}
+
+// Deref para que `estado.lock()` siga leyéndose igual en todo el código, sin
+// tener que escribir `estado.0.lock()` en cada uso.
+impl std::ops::Deref for EstadoSesion {
+    type Target = Mutex<Option<String>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Dónde se recuerda la sesión entre reinicios. Va con `usuario_id = NULL`
 /// porque es metadato de la instalación ("quién dejó la sesión abierta en esta
 /// PC"), no una preferencia de un usuario en particular. Guardarla bajo el
 /// usuario sería circular: haría falta saber quién es para poder leer quién es.
 pub const CLAVE_SESION: &str = "sesion_usuario_id";
+
+/// Si la sesión guardada se validó contra el servidor o solo contra SQLite.
+/// Valores: 'remoto' | 'local'. Va junto a CLAVE_SESION, con usuario_id NULL,
+/// por la misma razón: es un dato de la instalación.
+///
+/// NO guarda el token — eso vive en el llavero del sistema (ver token.rs).
+/// Aquí solo queda el rastro no secreto de en qué modo se entró.
+pub const CLAVE_MODO_SESION: &str = "sesion_modo";
+
+/// Claves de `configuracion` que describen a la INSTALACIÓN, no al usuario, y
+/// que por eso viven siempre en el alcance NULL y nunca se adoptan.
+///
+/// Todas comparten el mismo patrón: quien las lee consulta
+/// `usuario_id IS NULL`. Si la adopción se las llevara bajo una cuenta,
+/// dejarían de encontrarse y la app perdería la sesión recordada, el modo, o
+/// la dirección del servidor.
+pub const CLAVES_DE_INSTALACION: [&str; 3] = [
+    CLAVE_SESION,
+    CLAVE_MODO_SESION,
+    crate::api::CLAVE_API_URL,
+];
+
+/// Fragmento SQL para excluirlas. Se escribe una vez y se usa en el conteo y
+/// en la adopción, para que nunca se puedan desincronizar entre sí.
+const EXCLUIR_CLAVES_INSTALACION: &str = "clave NOT IN (?1, ?2, ?3)";
 
 /// Lo que ve el frontend. `password_hash` NO está aquí a propósito: no tiene
 /// por qué cruzar el puente hacia JavaScript ni aparecer en un log.
@@ -145,6 +191,35 @@ async fn recordar_sesion(
         }
     }
     Ok(())
+}
+
+/// Deja constancia de en qué modo se entró, para poder decírselo al usuario al
+/// reabrir la app sin tener que ir a preguntarle al servidor.
+async fn guardar_modo_sesion(pool: &sqlx::SqlitePool, remoto: bool) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO configuracion (usuario_id, clave, valor) VALUES (NULL, ?1, ?2)
+         ON CONFLICT(clave) WHERE usuario_id IS NULL
+         DO UPDATE SET valor = excluded.valor",
+    )
+    .bind(CLAVE_MODO_SESION)
+    .bind(if remoto { "remoto" } else { "local" })
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// URL del backend guardada en `configuracion`, si la hay. La variable de
+/// entorno gana sobre esto (lo resuelve `api::resolver_url`).
+pub async fn leer_api_url(pool: &sqlx::SqlitePool) -> Option<String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT valor FROM configuracion WHERE clave = ?1 AND usuario_id IS NULL",
+    )
+    .bind(crate::api::CLAVE_API_URL)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
 }
 
 async fn leer_sesion_recordada(pool: &sqlx::SqlitePool) -> Result<Option<String>, String> {
@@ -267,17 +342,37 @@ async fn registrar_usuario_en(
         return Err("Ese nombre de usuario ya está en uso.".into());
     }
 
-    let id_usuario = Uuid::new_v4().to_string();
+    // Se intenta dar de alta primero en el servidor para poder adoptar SU
+    // id_usuario. Así la cuenta nace con el mismo id en los dos lados y la
+    // sincronización no tiene nada que reconciliar.
+    //
+    // Si no hay servidor, la cuenta se crea igual con un UUID local: el alta
+    // no puede depender de tener conexión.
+    let (id_usuario, rol) = match crate::api::resolver_url(leer_api_url(pool).await) {
+        Some(url) => match crate::api::registrar(&url, &nombre, &correo, password).await {
+            crate::api::ResultadoRegistro::Creado(remoto) => (remoto.id_usuario, remoto.rol),
+            // El servidor ya tiene ese nombre o correo. Se corta el alta: si se
+            // creara solo en local, esa cuenta nunca podría sincronizar porque
+            // el nombre está tomado allá por otra persona.
+            crate::api::ResultadoRegistro::YaExiste(mensaje) => return Err(mensaje),
+            crate::api::ResultadoRegistro::NoDisponible => {
+                (Uuid::new_v4().to_string(), "vendedor".to_string())
+            }
+        },
+        None => (Uuid::new_v4().to_string(), "vendedor".to_string()),
+    };
+
     let hash = hashear(password)?;
 
     sqlx::query(
         "INSERT INTO usuarios (id_usuario, nombre_usuario, correo, password_hash, rol)
-         VALUES (?1, ?2, ?3, ?4, 'vendedor')",
+         VALUES (?1, ?2, ?3, ?4, ?5)",
     )
     .bind(&id_usuario)
     .bind(&nombre)
     .bind(&correo)
     .bind(&hash)
+    .bind(&rol)
     .execute(pool)
     .await
     .map_err(|e| {
@@ -307,18 +402,30 @@ async fn registrar_usuario_en(
 pub async fn iniciar_sesion(
     db_instances: State<'_, DbInstances>,
     estado: State<'_, EstadoSesion>,
+    token_estado: State<'_, EstadoToken>,
     identificador: String,
     password: String,
 ) -> Result<Usuario, String> {
     let pool = obtener_pool(db_instances.inner()).await?;
-    iniciar_sesion_en(&pool, estado.inner(), &identificador, &password).await
+    iniciar_sesion_en(
+        &pool,
+        estado.inner(),
+        token_estado.inner(),
+        &identificador,
+        &password,
+    )
+    .await
 }
 
 /// El cuerpo real, separado del comando para poder probarlo. Ver la nota en
 /// `registrar_usuario_en`.
+///
+/// Orden: primero el servidor, después SQLite. El servidor es la autoridad
+/// cuando está disponible, pero NUNCA es un requisito.
 async fn iniciar_sesion_en(
     pool: &sqlx::SqlitePool,
     estado: &EstadoSesion,
+    token_estado: &EstadoToken,
     identificador: &str,
     password: &str,
 ) -> Result<Usuario, String> {
@@ -327,11 +434,47 @@ async fn iniciar_sesion_en(
         return Err("Ingresa tu usuario o correo.".into());
     }
 
+    // Si el remoto autentica, deja la fila local lista (creada o actualizada) y
+    // devuelve su id junto con el token. Si no, seguimos como siempre.
+    let remoto = intentar_login_remoto(pool, &identificador, password).await;
+
+    let (id_usuario, token) = match remoto {
+        Some((id, token)) => (id, Some(token)),
+        None => (validar_contra_sqlite(pool, &identificador, password).await?, None),
+    };
+
+    // El token va a memoria y al llavero del sistema; nunca a la base ni al
+    // WebView. Lo que sí queda en `configuracion` es solo el modo, que no es
+    // secreto.
+    match &token {
+        Some(jwt) => crate::token::guardar(&id_usuario, jwt),
+        // Login local estando ya guardado un token viejo: se descarta, porque
+        // esta sesión no está respaldada por el servidor.
+        None => crate::token::borrar(&id_usuario),
+    }
+    *token_estado.lock().map_err(|_| "Sesión corrupta.")? = token.clone();
+
+    recordar_sesion(pool, Some(&id_usuario)).await?;
+    guardar_modo_sesion(pool, token.is_some()).await?;
+    *estado.lock().map_err(|_| "Sesión corrupta.")? = Some(id_usuario.clone());
+
+    buscar_por_id(pool, &id_usuario)
+        .await?
+        .ok_or_else(|| "El usuario desapareció durante el inicio de sesión.".to_string())
+}
+
+/// Valida contra el hash local. Es el modo principal y el único que funciona
+/// sin conexión; no cambió nada de cómo se comportaba antes.
+async fn validar_contra_sqlite(
+    pool: &sqlx::SqlitePool,
+    identificador: &str,
+    password: &str,
+) -> Result<String, String> {
     let fila: Option<(String, String)> = sqlx::query_as(
         "SELECT id_usuario, password_hash FROM usuarios
           WHERE nombre_usuario = ?1 OR correo = ?1",
     )
-    .bind(&identificador)
+    .bind(identificador)
     .fetch_optional(pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -345,13 +488,100 @@ async fn iniciar_sesion_en(
     if !verificar(password, &hash) {
         return Err("Usuario o contraseña incorrectos.".into());
     }
+    Ok(id_usuario)
+}
 
-    recordar_sesion(pool, Some(&id_usuario)).await?;
-    *estado.lock().map_err(|_| "Sesión corrupta.")? = Some(id_usuario.clone());
+/// Intenta el login contra el backend. `None` = seguir en local, sin ruido.
+///
+/// Un 401 del servidor tampoco corta el flujo: el vendedor puede tener cuenta
+/// local y no existir todavía en el servidor (o haber escrito su correo, que
+/// el endpoint no acepta como identificador). En los dos casos el login local
+/// tiene la última palabra, y si ahí también falla, sale el mensaje genérico
+/// de siempre.
+async fn intentar_login_remoto(
+    pool: &sqlx::SqlitePool,
+    identificador: &str,
+    password: &str,
+) -> Option<(String, String)> {
+    let url = crate::api::resolver_url(leer_api_url(pool).await)?;
 
-    buscar_por_id(pool, &id_usuario)
-        .await?
-        .ok_or_else(|| "El usuario desapareció durante el inicio de sesión.".to_string())
+    match crate::api::login(&url, identificador, password).await {
+        crate::api::ResultadoRemoto::Autenticado { token, usuario } => {
+            match sincronizar_usuario_local(pool, &usuario, password).await {
+                Ok(id_local) => Some((id_local, token)),
+                Err(e) => {
+                    // No se pudo dejar la fila local: sin ella no hay
+                    // usuario_id que ponerle a lo que se capture, así que se
+                    // cae a local en vez de dejar una sesión a medias.
+                    eprintln!("Aviso: login remoto OK pero falló la copia local: {e}");
+                    None
+                }
+            }
+        }
+        crate::api::ResultadoRemoto::Rechazado | crate::api::ResultadoRemoto::NoDisponible => None,
+    }
+}
+
+/// Deja en SQLite la fila del usuario que acaba de validar el servidor, y
+/// devuelve el `id_usuario` LOCAL que manda para esta sesión.
+///
+/// Guardar el hash de la contraseña recién verificada es lo que permite que la
+/// próxima vez se pueda entrar sin conexión: es el modelo de cache que la
+/// tabla `usuarios` siempre estuvo pensada para tener.
+///
+/// Sobre el id: si ya existía una cuenta local con ese nombre o correo, se
+/// CONSERVA su id local aunque el servidor use otro. Cambiarlo dejaría
+/// huérfanas todas las filas de clientes/notas/catálogos que lo referencian, y
+/// reconciliar ambos ids es trabajo de la sincronización, que todavía no
+/// existe. Cuando la cuenta es nueva en esta PC sí se adopta el id del
+/// servidor, que es el caso bueno: ids alineados desde el principio.
+async fn sincronizar_usuario_local(
+    pool: &sqlx::SqlitePool,
+    remoto: &crate::api::UsuarioRemoto,
+    password: &str,
+) -> Result<String, String> {
+    let hash = hashear(password)?;
+
+    let existente: Option<String> = sqlx::query_scalar(
+        "SELECT id_usuario FROM usuarios WHERE nombre_usuario = ?1 OR correo = ?2",
+    )
+    .bind(&remoto.nombre_usuario)
+    .bind(&remoto.correo)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if let Some(id_local) = existente {
+        sqlx::query(
+            "UPDATE usuarios
+                SET nombre_usuario = ?1, correo = ?2, password_hash = ?3, rol = ?4
+              WHERE id_usuario = ?5",
+        )
+        .bind(&remoto.nombre_usuario)
+        .bind(&remoto.correo)
+        .bind(&hash)
+        .bind(&remoto.rol)
+        .bind(&id_local)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        return Ok(id_local);
+    }
+
+    sqlx::query(
+        "INSERT INTO usuarios (id_usuario, nombre_usuario, correo, password_hash, rol)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+    )
+    .bind(&remoto.id_usuario)
+    .bind(&remoto.nombre_usuario)
+    .bind(&remoto.correo)
+    .bind(&hash)
+    .bind(&remoto.rol)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(remoto.id_usuario.clone())
 }
 
 /// Cierra sesión: memoria y disco. Lo ya capturado con ese usuario conserva su
@@ -360,10 +590,30 @@ async fn iniciar_sesion_en(
 pub async fn cerrar_sesion(
     db_instances: State<'_, DbInstances>,
     estado: State<'_, EstadoSesion>,
+    token_estado: State<'_, EstadoToken>,
 ) -> Result<(), String> {
     let pool = obtener_pool(db_instances.inner()).await?;
+
+    // El token se borra del llavero además de la memoria: si no, quien
+    // abriera la app después seguiría teniendo credenciales del servidor a
+    // nombre de alguien que ya cerró sesión.
+    if let Some(id) = usuario_id_de_sesion(&pool, estado.inner()).await? {
+        crate::token::borrar(&id);
+    }
+    *token_estado.lock().map_err(|_| "Sesión corrupta.")? = None;
+
     recordar_sesion(&pool, None).await?;
+    borrar_modo_sesion(&pool).await?;
     *estado.lock().map_err(|_| "Sesión corrupta.")? = None;
+    Ok(())
+}
+
+async fn borrar_modo_sesion(pool: &sqlx::SqlitePool) -> Result<(), String> {
+    sqlx::query("DELETE FROM configuracion WHERE clave = ?1 AND usuario_id IS NULL")
+        .bind(CLAVE_MODO_SESION)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -380,6 +630,86 @@ pub async fn usuario_actual(
         return Ok(None);
     };
     buscar_por_id(&pool, &id).await
+}
+
+/// Cómo está respaldada la sesión. Lo consume la barra lateral para poder
+/// decir "conectado al servidor" o "solo en esta PC".
+///
+/// Nótese que NO hay ningún campo con el token: el JWT no cruza a JavaScript
+/// en ninguna forma, ni completo ni recortado.
+#[derive(Serialize, Debug)]
+pub struct EstadoConexion {
+    /// 'remoto' si la sesión se validó contra el backend, 'local' si no.
+    pub modo: String,
+    /// Si esta corrida tiene un token cargado en memoria.
+    pub token_en_memoria: bool,
+    /// A qué backend apunta esta instalación, o None si el login remoto está
+    /// apagado. Sirve para diagnosticar sin abrir la base a mano.
+    pub api_url: Option<String>,
+}
+
+#[tauri::command]
+pub async fn estado_conexion(
+    db_instances: State<'_, DbInstances>,
+    token_estado: State<'_, EstadoToken>,
+) -> Result<EstadoConexion, String> {
+    let pool = obtener_pool(db_instances.inner()).await?;
+
+    let modo: Option<String> = sqlx::query_scalar(
+        "SELECT valor FROM configuracion WHERE clave = ?1 AND usuario_id IS NULL",
+    )
+    .bind(CLAVE_MODO_SESION)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // El api_url se resuelve ANTES de tocar el candado: si el `.lock()` se
+    // evaluara dentro del mismo literal que este await, el guard viviría
+    // cruzando el punto de espera y el future dejaría de ser Send.
+    let api_url = crate::api::resolver_url(leer_api_url(&pool).await);
+    let token_en_memoria = token_estado
+        .lock()
+        .map_err(|_| "Sesión corrupta.")?
+        .is_some();
+
+    Ok(EstadoConexion {
+        modo: modo.unwrap_or_else(|| "local".to_string()),
+        token_en_memoria,
+        api_url,
+    })
+}
+
+/// Recupera el token del llavero al arrancar la app y comprueba, si hay
+/// servidor a la vista, que siga sirviendo.
+///
+/// Un token vencido o un servidor caído NO cierran la sesión: la sesión local
+/// es válida por sí sola. Lo único que pasa es que el modo baja a 'local'
+/// hasta el próximo login con conexión.
+pub async fn restaurar_token(
+    pool: &sqlx::SqlitePool,
+    estado: &EstadoSesion,
+    token_estado: &EstadoToken,
+) -> Result<(), String> {
+    let Some(id_usuario) = usuario_id_de_sesion(pool, estado).await? else {
+        return Ok(());
+    };
+    let Some(token) = crate::token::leer(&id_usuario) else {
+        guardar_modo_sesion(pool, false).await?;
+        return Ok(());
+    };
+
+    let vigente = match crate::api::resolver_url(leer_api_url(pool).await) {
+        Some(url) => crate::api::token_sigue_vigente(&url, &token).await,
+        None => false,
+    };
+
+    if vigente {
+        *token_estado.lock().map_err(|_| "Sesión corrupta.")? = Some(token);
+    }
+    // Si no se pudo confirmar, el token se queda en el llavero (puede ser solo
+    // falta de internet) pero esta corrida opera en modo local.
+    guardar_modo_sesion(pool, vigente).await?;
+    Ok(())
 }
 
 // ============================================
@@ -419,13 +749,16 @@ pub async fn contar_datos_locales(
         .map_err(|e| e.to_string())
     }
 
-    // La sesión recordada no se cuenta ni se adopta (ver adoptar_datos_locales),
-    // así que tampoco debe aparecer en el aviso: si fuera lo único que queda,
-    // el usuario vería "1 ajuste por adoptar" que nunca baja a cero.
-    let configuracion: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM configuracion WHERE usuario_id IS NULL AND clave <> ?1",
-    )
-    .bind(CLAVE_SESION)
+    // Las claves de instalación no se cuentan ni se adoptan, así que tampoco
+    // deben aparecer en el aviso: si fueran lo único que queda, el usuario
+    // vería "3 ajustes por adoptar" que nunca bajan a cero.
+    let configuracion: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*) FROM configuracion
+          WHERE usuario_id IS NULL AND {EXCLUIR_CLAVES_INSTALACION}"
+    ))
+    .bind(CLAVES_DE_INSTALACION[0])
+    .bind(CLAVES_DE_INSTALACION[1])
+    .bind(CLAVES_DE_INSTALACION[2])
     .fetch_one(&pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -518,26 +851,29 @@ pub async fn adoptar_datos_locales(
         .map_err(|e| e.to_string())?
         .rows_affected();
 
-    // 'sesion_usuario_id' queda FUERA de la adopción, en el UPDATE y en el
-    // DELETE. Es metadato de la instalación ("quién dejó la sesión abierta en
-    // esta PC"), y vive en usuario_id NULL por diseño: leer_sesion_recordada
-    // consulta justo ese alcance. Si se adoptara, la fila dejaría de ser
-    // visible y la sesión se olvidaría al siguiente arranque — es decir,
-    // adoptar tus datos te desloguearía la próxima vez que abras la app.
-    let configuracion = sqlx::query(
-        "UPDATE OR IGNORE configuracion SET usuario_id = ?1
-          WHERE usuario_id IS NULL AND clave <> ?2",
-    )
+    // Las claves de instalación quedan FUERA de la adopción, en el UPDATE y en
+    // el DELETE. Describen a la PC, no al usuario, y quien las lee consulta el
+    // alcance NULL. Si se adoptaran: la sesión se olvidaría al siguiente
+    // arranque (adoptar tus datos te desloguearía), y la app perdería la
+    // dirección del servidor volviendo al localhost por defecto.
+    let configuracion = sqlx::query(&format!(
+        "UPDATE OR IGNORE configuracion SET usuario_id = ?4
+          WHERE usuario_id IS NULL AND {EXCLUIR_CLAVES_INSTALACION}"
+    ))
+    .bind(CLAVES_DE_INSTALACION[0])
+    .bind(CLAVES_DE_INSTALACION[1])
+    .bind(CLAVES_DE_INSTALACION[2])
     .bind(&usuario_id)
-    .bind(CLAVE_SESION)
     .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?
     .rows_affected();
-    let configuracion_descartada = sqlx::query(
-        "DELETE FROM configuracion WHERE usuario_id IS NULL AND clave <> ?1",
-    )
-    .bind(CLAVE_SESION)
+    let configuracion_descartada = sqlx::query(&format!(
+        "DELETE FROM configuracion WHERE usuario_id IS NULL AND {EXCLUIR_CLAVES_INSTALACION}"
+    ))
+    .bind(CLAVES_DE_INSTALACION[0])
+    .bind(CLAVES_DE_INSTALACION[1])
+    .bind(CLAVES_DE_INSTALACION[2])
     .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?
@@ -560,6 +896,24 @@ pub async fn adoptar_datos_locales(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Tauri guarda el state indexado por TypeId, así que dos estados con el
+    // mismo tipo concreto se pisan y el segundo `.manage()` entra en pánico al
+    // arrancar: "state for type ... is already being managed".
+    //
+    // Como los dos guardan `Mutex<Option<String>>`, convertirlos en alias otra
+    // vez tumbaría la app. Este test es barato y fija esa invariante, que de
+    // otro modo solo se descubre ejecutando la app: `cargo test` nunca
+    // construye el Builder de Tauri.
+    #[test]
+    fn los_dos_estados_en_memoria_son_tipos_distintos() {
+        use std::any::TypeId;
+        assert_ne!(
+            TypeId::of::<EstadoSesion>(),
+            TypeId::of::<EstadoToken>(),
+            "EstadoSesion y EstadoToken colisionan en el state de Tauri"
+        );
+    }
 
     #[test]
     fn el_hash_no_es_la_contrasena_en_claro() {
@@ -601,7 +955,29 @@ mod tests {
     // State que solo existe con la app corriendo), así que se ejercitan las
     // funciones que llevan la lógica. La app cableada encima es un pasamanos.
 
+    /// Base recién migrada CON el login remoto apagado (`api_url` vacío).
+    ///
+    /// Es deliberado: sin esto, los tests locales cambiarían de resultado
+    /// según si hay algo escuchando en el puerto 8000 de quien los corre, que
+    /// es justo lo que un test no debe hacer. Además representa fielmente la
+    /// instalación 100% local, que es el modo principal.
     async fn base_migrada() -> sqlx::SqlitePool {
+        let pool = base_sin_configurar().await;
+        sqlx::query("INSERT INTO configuracion (usuario_id, clave, valor) VALUES (NULL, ?1, '')")
+            .bind(crate::api::CLAVE_API_URL)
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    /// Igual, pero dejando el login remoto activo contra el backend por
+    /// defecto. Solo la usan los tests marcados #[ignore].
+    async fn base_migrada_con_servidor() -> sqlx::SqlitePool {
+        base_sin_configurar().await
+    }
+
+    async fn base_sin_configurar() -> sqlx::SqlitePool {
         let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
         for migracion in crate::migrations::migraciones() {
             sqlx::raw_sql(migracion.sql).execute(&pool).await.unwrap();
@@ -720,7 +1096,7 @@ mod tests {
 
         recordar_sesion(&pool, Some(&id)).await.unwrap();
 
-        let tras_reiniciar: EstadoSesion = Mutex::new(None);
+        let tras_reiniciar = EstadoSesion::nueva();
         let recuperado = usuario_id_de_sesion(&pool, &tras_reiniciar).await.unwrap();
         assert_eq!(recuperado.as_deref(), Some(id.as_str()));
         // Y queda cacheado en memoria para las siguientes llamadas.
@@ -736,7 +1112,7 @@ mod tests {
         recordar_sesion(&pool, None).await.unwrap();
 
         assert_eq!(leer_sesion_recordada(&pool).await.unwrap(), None);
-        let estado: EstadoSesion = Mutex::new(None);
+        let estado = EstadoSesion::nueva();
         assert_eq!(usuario_id_de_sesion(&pool, &estado).await.unwrap(), None);
     }
 
@@ -769,6 +1145,13 @@ mod tests {
 
     const PWD: &str = "hilo1234";
 
+    /// Los tests corren sin backend a la vista, así que el login remoto
+    /// siempre cae a local. Esto solo aporta el State de token que ahora pide
+    /// la firma.
+    fn sin_token() -> EstadoToken {
+        EstadoToken::nuevo()
+    }
+
     #[tokio::test]
     async fn registro_y_login_con_nombre_o_correo() {
         let pool = base_migrada().await;
@@ -781,14 +1164,14 @@ mod tests {
         assert_eq!(creado.rol, "vendedor");
 
         // Con el nombre de usuario.
-        let estado: EstadoSesion = Mutex::new(None);
-        let entrada = iniciar_sesion_en(&pool, &estado, "Josafat", PWD).await.unwrap();
+        let estado = EstadoSesion::nueva();
+        let entrada = iniciar_sesion_en(&pool, &estado, &sin_token(), "Josafat", PWD).await.unwrap();
         assert_eq!(entrada.id_usuario, creado.id_usuario);
 
         // Cerrar sesión y volver a entrar, ahora con el correo.
         recordar_sesion(&pool, None).await.unwrap();
-        let estado: EstadoSesion = Mutex::new(None);
-        let entrada = iniciar_sesion_en(&pool, &estado, "Josafat@correo.com", PWD)
+        let estado = EstadoSesion::nueva();
+        let entrada = iniciar_sesion_en(&pool, &estado, &sin_token(), "Josafat@correo.com", PWD)
             .await
             .unwrap();
         assert_eq!(entrada.id_usuario, creado.id_usuario);
@@ -804,8 +1187,8 @@ mod tests {
             .unwrap();
 
         for identificador in ["josafat", "JOSAFAT", "josafat@correo.com", "JOSAFAT@CORREO.COM"] {
-            let estado: EstadoSesion = Mutex::new(None);
-            let entrada = iniciar_sesion_en(&pool, &estado, identificador, PWD)
+            let estado = EstadoSesion::nueva();
+            let entrada = iniciar_sesion_en(&pool, &estado, &sin_token(), identificador, PWD)
                 .await
                 .unwrap_or_else(|e| panic!("«{identificador}» no entró: {e}"));
             assert_eq!(entrada.id_usuario, creado.id_usuario);
@@ -868,13 +1251,13 @@ mod tests {
         let pool = base_migrada().await;
         registrar_usuario_en(&pool, "Josafat", "josafat@correo.com", PWD).await.unwrap();
 
-        let estado: EstadoSesion = Mutex::new(None);
-        let inexistente = iniciar_sesion_en(&pool, &estado, "noexiste", PWD).await.unwrap_err();
-        let mala_password = iniciar_sesion_en(&pool, &estado, "Josafat", "otra-cosa")
+        let estado = EstadoSesion::nueva();
+        let inexistente = iniciar_sesion_en(&pool, &estado, &sin_token(), "noexiste", PWD).await.unwrap_err();
+        let mala_password = iniciar_sesion_en(&pool, &estado, &sin_token(), "Josafat", "otra-cosa")
             .await
             .unwrap_err();
         let correo_inexistente =
-            iniciar_sesion_en(&pool, &estado, "nadie@correo.com", PWD).await.unwrap_err();
+            iniciar_sesion_en(&pool, &estado, &sin_token(), "nadie@correo.com", PWD).await.unwrap_err();
 
         assert_eq!(inexistente, "Usuario o contraseña incorrectos.");
         assert_eq!(mala_password, inexistente);
@@ -884,11 +1267,80 @@ mod tests {
     #[tokio::test]
     async fn el_identificador_vacio_se_ataja_antes_de_consultar() {
         let pool = base_migrada().await;
-        let estado: EstadoSesion = Mutex::new(None);
+        let estado = EstadoSesion::nueva();
         assert_eq!(
-            iniciar_sesion_en(&pool, &estado, "   ", PWD).await.unwrap_err(),
+            iniciar_sesion_en(&pool, &estado, &sin_token(), "   ", PWD).await.unwrap_err(),
             "Ingresa tu usuario o correo."
         );
+    }
+
+    // ---- Login remoto (necesitan backend en 127.0.0.1:8000) ----
+    //
+    // Correr con: cargo test -- --ignored
+    // Sirven contra el FastAPI real o contra scratchpad/stub_backend.py.
+
+    #[tokio::test]
+    #[ignore = "necesita el backend en 127.0.0.1:8000"]
+    async fn el_login_remoto_crea_la_cuenta_local_con_el_id_del_servidor() {
+        let pool = base_migrada_con_servidor().await;
+        let estado = EstadoSesion::nueva();
+        let token_estado = sin_token();
+
+        // La cuenta NO existe en SQLite: solo en el servidor.
+        let usuario = iniciar_sesion_en(&pool, &estado, &token_estado, "Josafat", PWD)
+            .await
+            .expect("el login remoto debería crear la cuenta local");
+
+        assert_eq!(usuario.nombre_usuario, "Josafat");
+        // Id del servidor adoptado tal cual: es el caso bueno, ids alineados
+        // desde el principio para cuando exista la sincronización.
+        assert_eq!(usuario.id_usuario.len(), 36, "debería ser el UUID del servidor");
+        assert!(token_estado.lock().unwrap().is_some(), "el token no quedó en memoria");
+
+        let modo: String = sqlx::query_scalar(
+            "SELECT valor FROM configuracion WHERE clave = ?1 AND usuario_id IS NULL",
+        )
+        .bind(CLAVE_MODO_SESION)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(modo, "remoto");
+    }
+
+    // Lo que hace posible trabajar sin conexión al día siguiente: el hash de
+    // la contraseña queda guardado en SQLite tras el login remoto.
+    #[tokio::test]
+    #[ignore = "necesita el backend en 127.0.0.1:8000"]
+    async fn tras_el_login_remoto_se_puede_entrar_sin_servidor() {
+        let pool = base_migrada_con_servidor().await;
+        let estado = EstadoSesion::nueva();
+
+        iniciar_sesion_en(&pool, &estado, &sin_token(), "Josafat", PWD)
+            .await
+            .unwrap();
+
+        // Ahora el mismo login pero apuntando a un puerto muerto: simula estar
+        // sin conexión. Debe entrar igual, contra el hash local.
+        sqlx::query("INSERT INTO configuracion (usuario_id, clave, valor) VALUES (NULL, ?1, 'http://127.0.0.1:1')")
+            .bind(crate::api::CLAVE_API_URL)
+            .execute(&pool).await.unwrap();
+
+        let token_estado = sin_token();
+        let offline = iniciar_sesion_en(&pool, &estado, &token_estado, "Josafat", PWD)
+            .await
+            .expect("sin servidor debería entrar con el hash local");
+        assert_eq!(offline.nombre_usuario, "Josafat");
+        assert!(
+            token_estado.lock().unwrap().is_none(),
+            "sin servidor no debería haber token"
+        );
+
+        // Y también por correo, que el servidor no acepta pero SQLite sí.
+        let por_correo =
+            iniciar_sesion_en(&pool, &estado, &sin_token(), "josafat@correo.com", PWD)
+                .await
+                .expect("el correo debería resolver en local");
+        assert_eq!(por_correo.id_usuario, offline.id_usuario);
     }
 
     // ---- Adopción de datos locales ----
@@ -903,12 +1355,19 @@ mod tests {
         ).bind(usuario_id).execute(pool).await.unwrap().rows_affected();
         let descartados = sqlx::query("DELETE FROM colores_hilo WHERE usuario_id IS NULL")
             .execute(pool).await.unwrap().rows_affected();
-        let cfg = sqlx::query(
-            "UPDATE OR IGNORE configuracion SET usuario_id = ?1 WHERE usuario_id IS NULL AND clave <> ?2",
-        ).bind(usuario_id).bind(CLAVE_SESION).execute(pool).await.unwrap().rows_affected();
-        let cfg_descartada = sqlx::query(
-            "DELETE FROM configuracion WHERE usuario_id IS NULL AND clave <> ?1",
-        ).bind(CLAVE_SESION).execute(pool).await.unwrap().rows_affected();
+        let cfg = sqlx::query(&format!(
+            "UPDATE OR IGNORE configuracion SET usuario_id = ?4
+              WHERE usuario_id IS NULL AND {EXCLUIR_CLAVES_INSTALACION}"
+        ))
+        .bind(CLAVES_DE_INSTALACION[0]).bind(CLAVES_DE_INSTALACION[1])
+        .bind(CLAVES_DE_INSTALACION[2]).bind(usuario_id)
+        .execute(pool).await.unwrap().rows_affected();
+        let cfg_descartada = sqlx::query(&format!(
+            "DELETE FROM configuracion WHERE usuario_id IS NULL AND {EXCLUIR_CLAVES_INSTALACION}"
+        ))
+        .bind(CLAVES_DE_INSTALACION[0]).bind(CLAVES_DE_INSTALACION[1])
+        .bind(CLAVES_DE_INSTALACION[2])
+        .execute(pool).await.unwrap().rows_affected();
         (colores, descartados, cfg, cfg_descartada)
     }
 
@@ -973,11 +1432,16 @@ mod tests {
             .execute(&pool).await.unwrap();
 
         let (_, _, cfg, _) = adoptar(&pool, &id).await;
-        assert_eq!(cfg, 1, "solo maneja_tipos_hilo");
+        assert_eq!(cfg, 1, "solo maneja_tipos_hilo; api_url y sesion_* se quedan");
 
         // La sesión sigue donde la busca leer_sesion_recordada.
         assert_eq!(leer_sesion_recordada(&pool).await.unwrap().as_deref(), Some(id.as_str()));
-        let tras_reiniciar: EstadoSesion = Mutex::new(None);
+
+        // Y la dirección del servidor tampoco se movió: si se hubiera
+        // adoptado, leer_api_url dejaría de encontrarla y la app se iría al
+        // localhost por defecto sin avisar.
+        assert_eq!(leer_api_url(&pool).await.as_deref(), Some(""));
+        let tras_reiniciar = EstadoSesion::nueva();
         assert_eq!(
             usuario_id_de_sesion(&pool, &tras_reiniciar).await.unwrap().as_deref(),
             Some(id.as_str())
@@ -991,7 +1455,7 @@ mod tests {
         let pool = base_migrada().await;
         recordar_sesion(&pool, Some("id-que-no-existe")).await.unwrap();
 
-        let estado: EstadoSesion = Mutex::new(None);
+        let estado = EstadoSesion::nueva();
         assert_eq!(usuario_id_de_sesion(&pool, &estado).await.unwrap(), None);
         // Y además se limpia, para no repetir la consulta fallida cada vez.
         assert_eq!(leer_sesion_recordada(&pool).await.unwrap(), None);

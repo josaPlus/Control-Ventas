@@ -48,6 +48,63 @@ export async function usuarioActual(): Promise<Usuario | null> {
 }
 
 // ============================================
+// CONEXIÓN CON EL SERVIDOR
+// ============================================
+
+// Cómo está respaldada la sesión actual.
+//
+// Ojo con lo que NO está aquí: el JWT. El token vive en Rust y en el llavero
+// del sistema operativo, y no cruza a JavaScript en ninguna forma. Si alguna
+// vez hace falta llamar al backend, la llamada se hace desde Rust, que es
+// quien tiene el token.
+export interface EstadoConexion {
+  /** 'remoto' si se validó contra el backend, 'local' si solo contra SQLite. */
+  modo: 'remoto' | 'local';
+  token_en_memoria: boolean;
+  /** A qué backend apunta esta instalación, o null si el remoto está apagado. */
+  api_url: string | null;
+}
+
+export async function estadoConexion(): Promise<EstadoConexion> {
+  return await invoke<EstadoConexion>('estado_conexion');
+}
+
+// ============================================
+// SINCRONIZACIÓN (solo subida)
+// ============================================
+
+export interface PendientesSync {
+  clientes: number;
+  notas_venta: number;
+  colores_hilo: number;
+  tipos_hilo: number;
+}
+
+export interface ResumenSync {
+  clientes: number;
+  notas_venta: number;
+  colores_hilo: number;
+  tipos_hilo: number;
+  /** Lo que el servidor rechazó fila por fila. Que venga con algo no
+   *  significa que la sincronización fallara: el resto sí subió. */
+  problemas: string[];
+}
+
+export async function contarPendientesSync(): Promise<PendientesSync> {
+  return await invoke<PendientesSync>('contar_pendientes_sync');
+}
+
+// Sube lo pendiente. Lanza si no hay sesión con servidor o si se cae la
+// conexión a media tanda; lo que alcanzó a subir queda marcado.
+export async function sincronizarAhora(): Promise<ResumenSync> {
+  return await invoke<ResumenSync>('sincronizar_ahora');
+}
+
+export function totalPendiente(p: PendientesSync): number {
+  return p.clientes + p.notas_venta + p.colores_hilo + p.tipos_hilo;
+}
+
+// ============================================
 // ADOPCIÓN DE DATOS LOCALES
 // ============================================
 

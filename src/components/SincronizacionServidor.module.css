@@ -1,0 +1,55 @@
+.seccion {
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.titulo {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: var(--ink-primary);
+}
+
+.descripcion {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  line-height: 1.55;
+  margin: 0 0 14px 0;
+}
+
+.estado {
+  font-size: 0.87rem;
+  color: var(--ink-secondary);
+  margin-bottom: 14px;
+}
+
+.boton {
+  min-width: 190px;
+  height: 40px;
+}
+
+.aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.87rem;
+  line-height: 1.5;
+}
+
+.avisoExito {
+  background-color: var(--status-good-bg);
+  color: var(--status-good);
+}
+
+.avisoError {
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+}
+
+.problemas {
+  margin: 4px 0 0 0;
+  padding-left: 18px;
+}

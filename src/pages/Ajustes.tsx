@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useConfiguracion } from "../context/ConfiguracionContext";
 import { contarLineasConTipoHilo } from "../db/database";
 import AdopcionDatosLocales from "../components/AdopcionDatosLocales";
+import SincronizacionServidor from "../components/SincronizacionServidor";
 import CatalogoEditor from "../components/CatalogoEditor";
 import ConfirmDialog from "../components/ConfirmDialog";
 import styles from "./Ajustes.module.css";
@@ -63,6 +64,10 @@ export default function Ajustes() {
 
       {/* Se pinta sola solo si hay sesión y algo sin dueño que asociar. */}
       <AdopcionDatosLocales />
+
+      {/* Va después de la adopción a propósito: primero se decide qué datos
+          son tuyos, y solo entonces tiene sentido enviarlos. */}
+      <SincronizacionServidor />
 
       <CatalogoEditor
         catalogo="colores_hilo"

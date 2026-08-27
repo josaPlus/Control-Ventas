@@ -1,17 +1,22 @@
+mod api;
 mod auth;
 mod catalogos;
 mod clientes;
 mod configuracion;
 mod db;
 mod migrations;
+mod sincronizacion;
 mod sync;
+mod token;
 mod ventas;
 
 use auth::{
-    adoptar_datos_locales, cerrar_sesion, contar_datos_locales, iniciar_sesion, registrar_usuario,
-    usuario_actual, EstadoSesion,
+    adoptar_datos_locales, cerrar_sesion, contar_datos_locales, estado_conexion, iniciar_sesion,
+    registrar_usuario, usuario_actual, EstadoSesion,
 };
+use token::EstadoToken;
 use configuracion::{guardar_configuracion, leer_configuracion};
+use sincronizacion::{contar_pendientes_sync, sincronizar_ahora};
 use catalogos::{
     agregar_entrada_catalogo, contar_uso_en_ventas, eliminar_entrada_catalogo, leer_catalogo,
     renombrar_entrada_catalogo,
@@ -59,12 +64,41 @@ pub fn run() {
         // sesión recordada, se recupera de `configuracion` la primera vez que
         // alguien pregunte (ver auth::usuario_id_de_sesion). No se hace aquí
         // porque en el setup la base todavía no terminó de migrar.
-        .manage(EstadoSesion::new(None))
+        .manage(EstadoSesion::nueva())
+        // El JWT vive aquí durante la corrida. No hay ningún comando que lo
+        // devuelva: el token no cruza hacia JavaScript nunca.
+        .manage(EstadoToken::nuevo())
         .setup(|app| {
             // NUEVO: se corre una vez al arrancar la app
             if let Err(e) = asegurar_carpeta_save(app.handle()) {
                 eprintln!("Aviso: {e}");
             }
+
+            // Recupera el JWT del llavero y comprueba contra el servidor si
+            // sigue vigente. Va en una tarea aparte a propósito: implica una
+            // petición HTTP y la ventana no tiene por qué esperarla. Si no hay
+            // servidor, la app queda en modo local y todo funciona igual.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let instancias = handle.state::<tauri_plugin_sql::DbInstances>();
+                let pool = match db::obtener_pool(instancias.inner()).await {
+                    Ok(pool) => pool,
+                    Err(e) => {
+                        eprintln!("Aviso: no se pudo restaurar la sesión: {e}");
+                        return;
+                    }
+                };
+                if let Err(e) = auth::restaurar_token(
+                    &pool,
+                    &handle.state::<EstadoSesion>(),
+                    &handle.state::<EstadoToken>(),
+                )
+                .await
+                {
+                    eprintln!("Aviso: no se pudo restaurar el token: {e}");
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -86,6 +120,9 @@ pub fn run() {
             usuario_actual,
             contar_datos_locales,
             adoptar_datos_locales,
+            estado_conexion,
+            sincronizar_ahora,
+            contar_pendientes_sync,
             leer_configuracion,
             guardar_configuracion
         ])

@@ -135,6 +135,27 @@
   text-transform: capitalize;
 }
 
+.conexion {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.conexionRemota {
+  background-color: var(--status-good-bg);
+  color: var(--status-good);
+}
+
+/* Gris, no ámbar: trabajar sin servidor es un modo válido y permanente, no
+   una advertencia que el usuario deba resolver. */
+.conexionLocal {
+  background-color: var(--surface-sunken);
+  color: var(--ink-muted);
+}
+
 .sinSesion {
   font-size: 0.8rem;
   color: var(--ink-muted);
