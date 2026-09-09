@@ -110,6 +110,36 @@ pub fn resolver_url(desde_configuracion: Option<String>) -> Option<String> {
     Some(limpio.to_string())
 }
 
+/// Traza lo que se va a mandar, SIN la contraseña.
+///
+/// Se imprime la longitud y si trae espacios en los bordes, que es lo único
+/// que hace falta para descartar un dedazo o un autocompletado con espacio, y
+/// nada de eso permite reconstruir la contraseña.
+///
+/// TEMPORAL: quitar cuando termine el diagnóstico del login remoto.
+fn diagnostico_peticion(url: &str, identificador: &str, password: &str) {
+    eprintln!("[DIAG login] POST {url}");
+    eprintln!(
+        "[DIAG login] body.nombre_usuario = «{identificador}» ({} chars){}",
+        identificador.chars().count(),
+        if identificador.contains('@') {
+            "  <-- PARECE UN CORREO: el servidor solo acepta nombre_usuario"
+        } else {
+            ""
+        }
+    );
+    eprintln!(
+        "[DIAG login] body.password = {} chars{}{}",
+        password.chars().count(),
+        if password.is_empty() { "  <-- VACÍA" } else { "" },
+        if password != password.trim() {
+            "  <-- TIENE ESPACIOS AL INICIO O AL FINAL"
+        } else {
+            ""
+        }
+    );
+}
+
 fn cliente() -> Option<reqwest::Client> {
     reqwest::Client::builder()
         .timeout(TIMEOUT)
@@ -129,8 +159,11 @@ pub async fn login(url_base: &str, identificador: &str, password: &str) -> Resul
         return ResultadoRemoto::NoDisponible;
     };
 
+    let url = format!("{url_base}/auth/login");
+    diagnostico_peticion(&url, identificador, password);
+
     let respuesta = cliente
-        .post(format!("{url_base}/auth/login"))
+        .post(&url)
         .json(&LoginPeticion {
             nombre_usuario: identificador,
             password,
@@ -142,10 +175,19 @@ pub async fn login(url_base: &str, identificador: &str, password: &str) -> Resul
         Ok(r) => r,
         // Servidor apagado, DNS que no resuelve, timeout... todo es lo mismo
         // desde aquí: no hay servidor con quien hablar.
-        Err(_) => return ResultadoRemoto::NoDisponible,
+        Err(e) => {
+            eprintln!("[DIAG login] no hubo respuesta del servidor: {e}");
+            return ResultadoRemoto::NoDisponible;
+        }
     };
 
+    eprintln!("[DIAG login] el servidor respondió {}", respuesta.status());
+
     if respuesta.status() == reqwest::StatusCode::UNAUTHORIZED {
+        // El cuerpo del 401 trae el 'detail' de FastAPI, que ayuda a separar
+        // "credenciales invalidas" de cualquier otro rechazo.
+        let detalle = respuesta.text().await.unwrap_or_default();
+        eprintln!("[DIAG login] 401, cuerpo: {detalle}");
         return ResultadoRemoto::Rechazado;
     }
     if !respuesta.status().is_success() {
@@ -225,12 +267,24 @@ async fn usuario_actual(
     url_base: &str,
     token: &str,
 ) -> Option<UsuarioRemoto> {
+    // TEMPORAL (diagnóstico): bearer_auth arma exactamente
+    // `Authorization: Bearer <token>`. Se imprime el prefijo del token, no el
+    // token entero, para poder distinguir un JWT real (empieza en "eyJ") de
+    // uno viejo o basura sin dejar credenciales en la consola.
+    eprintln!(
+        "[DIAG me] GET {url_base}/auth/me  header: 'Authorization: Bearer {}…' ({} chars)",
+        &token.chars().take(6).collect::<String>(),
+        token.chars().count()
+    );
+
     let respuesta = cliente
         .get(format!("{url_base}/auth/me"))
         .bearer_auth(token)
         .send()
         .await
         .ok()?;
+
+    eprintln!("[DIAG me] el servidor respondió {}", respuesta.status());
 
     if !respuesta.status().is_success() {
         return None;

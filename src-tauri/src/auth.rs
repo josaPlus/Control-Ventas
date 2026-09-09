@@ -503,7 +503,20 @@ async fn intentar_login_remoto(
     identificador: &str,
     password: &str,
 ) -> Option<(String, String)> {
-    let url = crate::api::resolver_url(leer_api_url(pool).await)?;
+    // TEMPORAL (diagnóstico): deja ver a qué servidor se está apuntando de
+    // verdad, y si el login remoto está apagado en esta instalación.
+    let configurada = leer_api_url(pool).await;
+    let url = match crate::api::resolver_url(configurada.clone()) {
+        Some(url) => url,
+        None => {
+            eprintln!(
+                "[DIAG login] login remoto APAGADO (api_url = {configurada:?}); \
+                 se valida solo contra SQLite"
+            );
+            return None;
+        }
+    };
+    eprintln!("[DIAG login] servidor destino: {url}  (api_url en base: {configurada:?})");
 
     match crate::api::login(&url, identificador, password).await {
         crate::api::ResultadoRemoto::Autenticado { token, usuario } => {
