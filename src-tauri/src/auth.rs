@@ -984,10 +984,21 @@ mod tests {
         pool
     }
 
-    /// Igual, pero dejando el login remoto activo contra el backend por
-    /// defecto. Solo la usan los tests marcados #[ignore].
+    /// Igual, pero con el login remoto apuntando al backend LOCAL de pruebas.
+    /// Solo la usan los tests marcados #[ignore].
+    ///
+    /// La URL se escribe explícita en vez de dejar que caiga al valor por
+    /// defecto: ese default es el servidor de la fábrica, y estos tests dan de
+    /// alta usuarios.
     async fn base_migrada_con_servidor() -> sqlx::SqlitePool {
-        base_sin_configurar().await
+        let pool = base_sin_configurar().await;
+        sqlx::query("INSERT INTO configuracion (usuario_id, clave, valor) VALUES (NULL, ?1, ?2)")
+            .bind(crate::api::CLAVE_API_URL)
+            .bind(crate::api::URL_PRUEBAS)
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool
     }
 
     async fn base_sin_configurar() -> sqlx::SqlitePool {

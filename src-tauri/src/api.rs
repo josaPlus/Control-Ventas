@@ -12,17 +12,35 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-/// A dónde apunta el cliente si nadie configura nada. El backend en local.
-pub const API_URL_POR_DEFECTO: &str = "http://127.0.0.1:8000";
+/// A dónde apunta el cliente si nadie configura nada.
+///
+/// **La dirección vive en `src-tauri/.env`** (`CONTROL_VENTAS_API_URL_POR_DEFECTO`)
+/// y build.rs la incrusta al compilar. Para mudar el servidor se cambia allá;
+/// el resto del código la pide a `resolver_url()`. Sin puerto porque nginx
+/// expone HTTPS en el 443, que es el estándar y va implícito en el esquema.
+///
+/// Sobre el certificado: es autofirmado por una CA propia, instalada como
+/// confiable en `Cert:\LocalMachine\Root` de cada workstation. La validación
+/// TLS queda ACTIVA y en su forma normal — ver la nota en `cliente()`.
+pub const API_URL_POR_DEFECTO: &str = env!("CONTROL_VENTAS_API_URL_POR_DEFECTO");
 
 /// Variable de entorno que gana sobre cualquier otra configuración. Pensada
-/// para desarrollo: `CONTROL_VENTAS_API_URL=http://otra-maquina:8000`.
+/// para desarrollo: `CONTROL_VENTAS_API_URL=http://127.0.0.1:8000`.
 pub const VAR_ENTORNO_API: &str = "CONTROL_VENTAS_API_URL";
 
 /// Clave en la tabla `configuracion` (con usuario_id NULL, es un dato de la
-/// instalación) para apuntar al servidor sin recompilar. Es la vía pensada
-/// para el día que el backend deje de estar en localhost.
+/// instalación) para apuntar a otro servidor sin recompilar: mudanza de IP,
+/// una workstation de pruebas, o dejarla vacía para apagar el login remoto en
+/// esa PC.
 pub const CLAVE_API_URL: &str = "api_url";
+
+/// Backend local contra el que corren los tests marcados `#[ignore]`.
+///
+/// Deliberadamente separada de `API_URL_POR_DEFECTO`: si los tests usaran la
+/// constante de producción, `cargo test -- --ignored` daría de alta usuarios y
+/// subiría ventas de prueba al servidor de la fábrica.
+#[cfg(test)]
+pub(crate) const URL_PRUEBAS: &str = "http://127.0.0.1:8000";
 
 /// Corto a propósito. Este timeout es lo que espera un vendedor sin conexión
 /// antes de que el login caiga a modo local; si fuera de 30s parecería que la
@@ -110,36 +128,31 @@ pub fn resolver_url(desde_configuracion: Option<String>) -> Option<String> {
     Some(limpio.to_string())
 }
 
-/// Traza lo que se va a mandar, SIN la contraseña.
-///
-/// Se imprime la longitud y si trae espacios en los bordes, que es lo único
-/// que hace falta para descartar un dedazo o un autocompletado con espacio, y
-/// nada de eso permite reconstruir la contraseña.
+/// Traza a dónde se va a mandar el login. No imprime el usuario ni nada de la
+/// contraseña: solo avisa si el identificador parece un correo, que es la
+/// causa más común de un 401.
 ///
 /// TEMPORAL: quitar cuando termine el diagnóstico del login remoto.
-fn diagnostico_peticion(url: &str, identificador: &str, password: &str) {
+fn diagnostico_peticion(url: &str, identificador: &str) {
     eprintln!("[DIAG login] POST {url}");
-    eprintln!(
-        "[DIAG login] body.nombre_usuario = «{identificador}» ({} chars){}",
-        identificador.chars().count(),
-        if identificador.contains('@') {
-            "  <-- PARECE UN CORREO: el servidor solo acepta nombre_usuario"
-        } else {
-            ""
-        }
-    );
-    eprintln!(
-        "[DIAG login] body.password = {} chars{}{}",
-        password.chars().count(),
-        if password.is_empty() { "  <-- VACÍA" } else { "" },
-        if password != password.trim() {
-            "  <-- TIENE ESPACIOS AL INICIO O AL FINAL"
-        } else {
-            ""
-        }
-    );
+    if identificador.contains('@') {
+        eprintln!("[DIAG login] el identificador parece un correo: el servidor solo acepta nombre_usuario");
+    }
 }
 
+/// Cliente HTTP con la validación de certificados en su comportamiento por
+/// defecto, que es el correcto aquí.
+///
+/// No se llama a `danger_accept_invalid_certs` ni se agrega ninguna excepción,
+/// y no hace falta: con la feature `rustls` de reqwest 0.13, cuando no se
+/// pasan raíces propias el cliente valida con `rustls_platform_verifier`, o
+/// sea con el verificador del sistema operativo. En Windows eso es CryptoAPI,
+/// que lee los almacenes de certificados de la máquina — incluido
+/// `Cert:\LocalMachine\Root`, donde va instalada nuestra CA.
+///
+/// Consecuencia práctica: si la CA está bien instalada, esto funciona solo; y
+/// si algún día deja de estarlo, el login falla en vez de aceptar en silencio
+/// un certificado que no debería. Que es justo lo que queremos.
 fn cliente() -> Option<reqwest::Client> {
     reqwest::Client::builder()
         .timeout(TIMEOUT)
@@ -160,7 +173,7 @@ pub async fn login(url_base: &str, identificador: &str, password: &str) -> Resul
     };
 
     let url = format!("{url_base}/auth/login");
-    diagnostico_peticion(&url, identificador, password);
+    diagnostico_peticion(&url, identificador);
 
     let respuesta = cliente
         .post(&url)
@@ -267,15 +280,9 @@ async fn usuario_actual(
     url_base: &str,
     token: &str,
 ) -> Option<UsuarioRemoto> {
-    // TEMPORAL (diagnóstico): bearer_auth arma exactamente
-    // `Authorization: Bearer <token>`. Se imprime el prefijo del token, no el
-    // token entero, para poder distinguir un JWT real (empieza en "eyJ") de
-    // uno viejo o basura sin dejar credenciales en la consola.
-    eprintln!(
-        "[DIAG me] GET {url_base}/auth/me  header: 'Authorization: Bearer {}…' ({} chars)",
-        &token.chars().take(6).collect::<String>(),
-        token.chars().count()
-    );
+    // TEMPORAL (diagnóstico): nada del token se imprime, ni siquiera un
+    // fragmento; solo a qué endpoint se va.
+    eprintln!("[DIAG me] GET {url_base}/auth/me (con token Bearer)");
 
     let respuesta = cliente
         .get(format!("{url_base}/auth/me"))
@@ -502,6 +509,14 @@ mod tests {
         // Sin nada configurado, el backend local.
         assert_eq!(resolver_url(None).as_deref(), Some(API_URL_POR_DEFECTO));
 
+        // El default de producción va por HTTPS. Sin esto, cambiarlo a http
+        // mandaría las contraseñas en claro por la red de la fábrica y nada
+        // avisaría.
+        assert!(
+            API_URL_POR_DEFECTO.starts_with("https://"),
+            "el servidor por defecto debe ir por HTTPS"
+        );
+
         // La configuración manda sobre el default.
         assert_eq!(
             resolver_url(Some("http://192.168.1.50:8000".into())).as_deref(),
@@ -550,7 +565,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "necesita el backend en 127.0.0.1:8000"]
     async fn login_correcto_devuelve_token_y_perfil() {
-        let resultado = login(API_URL_POR_DEFECTO, "Josafat", "hilo1234").await;
+        let resultado = login(URL_PRUEBAS, "Josafat", "hilo1234").await;
         match resultado {
             ResultadoRemoto::Autenticado { token, usuario } => {
                 assert!(!token.is_empty());
@@ -564,7 +579,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "necesita el backend en 127.0.0.1:8000"]
     async fn password_incorrecta_es_rechazado_no_no_disponible() {
-        let resultado = login(API_URL_POR_DEFECTO, "Josafat", "password-mala").await;
+        let resultado = login(URL_PRUEBAS, "Josafat", "password-mala").await;
         assert!(matches!(resultado, ResultadoRemoto::Rechazado));
     }
 
@@ -574,13 +589,13 @@ mod tests {
     #[tokio::test]
     #[ignore = "necesita el backend en 127.0.0.1:8000"]
     async fn el_servidor_no_acepta_el_correo_como_identificador() {
-        let resultado = login(API_URL_POR_DEFECTO, "josafat@correo.com", "hilo1234").await;
+        let resultado = login(URL_PRUEBAS, "josafat@correo.com", "hilo1234").await;
         assert!(matches!(resultado, ResultadoRemoto::Rechazado));
     }
 
     #[tokio::test]
     #[ignore = "necesita el backend en 127.0.0.1:8000"]
     async fn un_token_inventado_no_pasa_la_revalidacion() {
-        assert!(!token_sigue_vigente(API_URL_POR_DEFECTO, "no-soy-un-token").await);
+        assert!(!token_sigue_vigente(URL_PRUEBAS, "no-soy-un-token").await);
     }
 }

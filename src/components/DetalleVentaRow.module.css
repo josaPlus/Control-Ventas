@@ -14,22 +14,6 @@
   grid-template-columns: 1.2fr 1.2fr 0.8fr 0.9fr 0.9fr auto;
 }
 
-.headerRow {
-  display: grid;
-  grid-template-columns: 1.4fr 0.9fr 1fr 1fr auto;
-  gap: 10px;
-  padding: 0 10px;
-  margin-bottom: 6px;
-}
-
-.headerCell {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--ink-muted);
-}
-
 .subtotalBox {
   display: flex;
   align-items: center;
@@ -73,11 +57,7 @@
 }
 
 @media (max-width: 760px) {
-  .row,
-  .headerRow {
+  .row {
     grid-template-columns: 1fr 1fr;
-  }
-  .headerRow {
-    display: none;
   }
 }

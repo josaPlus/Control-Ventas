@@ -51,6 +51,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Servidor por defecto que queda incrustado en el instalador (lo lee
+          # src-tauri/build.rs). Se define en Settings → Secrets and variables
+          # → Actions → Variables. Si falta, el build falla a propósito.
+          CONTROL_VENTAS_API_URL_POR_DEFECTO: ${{ secrets.CONTROL_VENTAS_API_URL_POR_DEFECTO }}
         with:
           projectPath: '.'
           tauriScript: 'npm run tauri'

@@ -25,11 +25,6 @@ use clientes::{actualizar_cliente, crear_cliente, eliminar_cliente};
 use tauri::Manager; // NUEVO: necesario para app.path()
 use ventas::{actualizar_nota_venta, crear_nota_venta, eliminar_nota_venta};
 
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 // NUEVO: crea Documentos/Control de Ventas/Save si no existe.
 // create_dir_all no truena si la carpeta ya está ahí, así que es seguro
 // llamarla en cada arranque de la app.
@@ -55,7 +50,6 @@ pub fn run() {
                 .add_migrations(db::DB_URL, migrations::migraciones())
                 .build(),
         )
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_fs::init()) // NUEVO
@@ -102,7 +96,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            greet,
             crear_nota_venta,
             actualizar_nota_venta,
             eliminar_nota_venta,

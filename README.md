@@ -24,7 +24,7 @@ Construida con **Tauri 2 + React + TypeScript**, con una base de datos **SQLite 
 **Backend / escritorio**
 - Tauri 2 (Rust)
 - `sqlx` sobre SQLite, con transacciones reales para operaciones de varios pasos (crear/actualizar nota de venta)
-- Plugins de Tauri: `sql`, `updater`, `process`, `opener`
+- Plugins de Tauri: `sql`, `updater`, `process`
 
 ## Estructura del proyecto
 
@@ -81,8 +81,3 @@ npm run dev        # Solo el frontend con Vite (sin la ventana de Tauri)
 npm run build       # tsc + build de Vite
 npm run preview     # Previsualizar el build de Vite
 ```
-
-## Notas
-
-- La base de datos SQLite (`ventas.db`) se crea y migra automáticamente al iniciar la app.
-- El proyecto está identificado como `com.josaf.control-ventas` y publica actualizaciones a través de releases en `josaPlus/Control-Ventas` en GitHub.

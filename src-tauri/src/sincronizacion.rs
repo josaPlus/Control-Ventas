@@ -465,7 +465,7 @@ mod tests {
     use super::*;
     use crate::api::{ResultadoRegistro, ResultadoRemoto};
 
-    const URL: &str = crate::api::API_URL_POR_DEFECTO;
+    const URL: &str = crate::api::URL_PRUEBAS;
     const PWD: &str = "hilo1234";
 
     async fn base_migrada() -> sqlx::SqlitePool {

@@ -2,6 +2,8 @@ import Database from '@tauri-apps/plugin-sql';
 import { invoke } from '@tauri-apps/api/core';
 import type { Cliente, NotaVenta, DetalleVenta, NotaVentaCompleta } from '../types/models';
 import { sumarDias } from '../lib/semanas';
+// Misma fuente que usa Rust (build.rs): plugins.sql.preload de tauri.conf.json.
+import { plugins } from '../../src-tauri/tauri.conf.json';
 
 // Se memoiza la promesa, no la conexión ya resuelta. Si se guardara la
 // conexión, dos llamadas simultáneas al arrancar la app verían ambas el valor
@@ -11,7 +13,7 @@ let dbPromise: Promise<Database> | null = null;
 
 export async function getDb(): Promise<Database> {
   if (!dbPromise) {
-    dbPromise = Database.load('sqlite:ventas.db');
+    dbPromise = Database.load(plugins.sql.preload[0]);
   }
   return await dbPromise;
 }

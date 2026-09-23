@@ -21,10 +21,11 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# build.rs lee el nombre de la base desde tauri.conf.json.
+serde_json = "1"
 
 [dependencies]
 tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
@@ -44,15 +45,19 @@ uuid = { version = "1", features = ["v4"] }
 argon2 = { version = "0.5", features = ["std"] }
 # Cliente HTTP para el login remoto. Misma versión que ya arrastra
 # tauri-plugin-updater, para no compilar dos copias de reqwest.
-# rustls en vez de schannel/openssl: una sola implementación de TLS en todas
-# las plataformas, sin depender de lo que tenga instalado la PC.
-# webpki-roots trae los certificados raíz dentro del binario: el día que el
-# servidor esté en HTTPS, no dependemos de qué tenga instalado la PC del
-# cliente ni de que Windows tenga el almacén actualizado.
+#
+# La feature "rustls" incluye rustls-platform-verifier, así que la validación
+# de certificados usa el almacén del SISTEMA OPERATIVO (en Windows, CryptoAPI
+# leyendo Cert:\LocalMachine\Root). Eso es lo que hace que el certificado
+# autofirmado por nuestra CA funcione sin ninguna configuración extra en el
+# código, una vez instalada la CA en la workstation.
+#
+# NO agregar "webpki-roots": esa feature empaqueta las raíces de Mozilla
+# dentro del binario, y con ella el almacén de Windows deja de ser la fuente
+# de confianza — nuestra CA propia nunca sería válida.
 reqwest = { version = "0.13", default-features = false, features = [
     "json",
     "rustls",
-    "webpki-roots",
 ] }
 # El JWT se guarda en el almacén de credenciales del sistema operativo
 # (Credential Manager en Windows), NO en la base ni en el WebView.
