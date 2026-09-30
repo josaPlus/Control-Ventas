@@ -75,13 +75,21 @@ export async function eliminarCliente(clienteId: number): Promise<void> {
 // NOTAS DE VENTA
 // ============================================
 
-// Calcula el siguiente número de nota de forma automática y consecutiva
+export interface NumeracionNotas {
+  siguiente: number;
+  /** null cuando todavía no hay notas registradas. */
+  ultima: number | null;
+}
+
+// La regla (última nota + 1, respetando el folio inicial) vive solo en Rust,
+// en el mismo lugar que asigna el número al guardar. Si se calculara también
+// aquí, la vista previa podría mostrar un número distinto al que se guarda.
+export async function obtenerNumeracionNotas(): Promise<NumeracionNotas> {
+  return await invoke<NumeracionNotas>('obtener_siguiente_numero_nota');
+}
+
 export async function obtenerSiguienteNumeroNota(): Promise<number> {
-  const database = await getDb();
-  const result = await database.select<{ siguiente: number }[]>(
-    'SELECT COALESCE(MAX(numero_nota), 0) + 1 AS siguiente FROM notas_venta'
-  );
-  return result[0].siguiente;
+  return (await obtenerNumeracionNotas()).siguiente;
 }
 
 // Forma en que el backend espera una línea de venta. Se comparte entre crear y
@@ -280,6 +288,19 @@ export async function contarLineasConTipoHilo(): Promise<number> {
 // Si el negocio maneja varios tipos de hilo. Decide si el campo aparece en el
 // formulario de venta. Ausente = todavía no se ha configurado la app.
 export const CLAVE_MANEJA_TIPOS = 'maneja_tipos_hilo';
+
+// Número desde el que arranca la numeración de notas, para quien ya llevaba
+// notas en papel. Es un piso: la numeración nunca retrocede. Ausente = 1.
+// Es de la instalación, no del usuario: vive con usuario_id NULL, así que
+// leerConfiguracion lo encuentra con o sin sesión. Se guarda con
+// guardarFolioInicial, no con guardarConfiguracion, que lo pondría en el
+// alcance de la sesión.
+export const CLAVE_FOLIO_INICIAL = 'folio_inicial';
+
+// Rechaza un folio igual o menor a la última nota registrada.
+export async function guardarFolioInicial(valor: number): Promise<void> {
+  await invoke('guardar_folio_inicial', { valor });
+}
 
 // Desde la v4 configuracion tiene alcance por usuario, así que la consulta ya
 // no puede vivir aquí con un usuario_id fijo: en cuanto se adoptan los datos

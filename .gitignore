@@ -35,8 +35,11 @@ src-tauri/Cargo.lock  # opcional: en apps binarias muchos SÍ lo suben, ver nota
 # Vite
 .vite/
 
+# entorno
 .env
 .env.local
 .env.*.local
 .env.production
 .env.production.local
+src-tauri/.env
+src-tauri/.env.*

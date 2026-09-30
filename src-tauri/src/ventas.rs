@@ -35,6 +35,57 @@ pub struct NotaVentaCreada {
     numero_nota: i64,
 }
 
+// Misma clave que CLAVE_FOLIO_INICIAL en src/db/database.ts. Es clave de
+// instalación (ver auth::CLAVES_DE_INSTALACION): vive siempre con usuario_id
+// NULL y la adopción no se la lleva, porque la numeración es de toda la base.
+pub const CLAVE_FOLIO_INICIAL: &str = "folio_inicial";
+
+// Tope razonable para un folio en papel. Evita que un valor enorme lleve a
+// MAX(numero_nota) + 1 cerca del límite de i64.
+const FOLIO_MAXIMO: i64 = 999_999_999;
+
+#[derive(Serialize)]
+pub struct NumeracionNotas {
+    siguiente: i64,
+    // None cuando todavía no hay notas. Ajustes la usa para rechazar un folio
+    // que chocaría con una nota que ya existe.
+    ultima: Option<i64>,
+}
+
+// El valor se valida aquí y no con CAST en SQL: SQLite convierte '3000abc' en
+// 3000 y '1e5' en 1, y eso no es un folio válido. Cualquier cosa rara se
+// ignora y la numeración se comporta como antes de existir el ajuste.
+fn interpretar_folio(valor: &str) -> Option<i64> {
+    valor
+        .trim()
+        .parse::<i64>()
+        .ok()
+        .filter(|n| (1..=FOLIO_MAXIMO).contains(n))
+}
+
+// Única fuente de la regla del número de nota. El folio inicial funciona como
+// piso, no como reinicio: la numeración nunca retrocede ni repite un número.
+async fn calcular_numeracion(conn: &mut sqlx::SqliteConnection) -> Result<NumeracionNotas, String> {
+    let ultima: Option<i64> = sqlx::query_scalar("SELECT MAX(numero_nota) FROM notas_venta")
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let folio: Option<String> = sqlx::query_scalar(
+        "SELECT valor FROM configuracion WHERE clave = ?1 AND usuario_id IS NULL",
+    )
+    .bind(CLAVE_FOLIO_INICIAL)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|e| e.to_string())?;
+    let piso = folio.as_deref().and_then(interpretar_folio).unwrap_or(1);
+
+    Ok(NumeracionNotas {
+        siguiente: (ultima.unwrap_or(0) + 1).max(piso),
+        ultima,
+    })
+}
+
 /// Normaliza color y tipo de cada línea antes de tocar la base, para que el
 /// texto que se guarda en la venta y el que entra al catálogo sean el mismo.
 /// Un tipo que quede vacío se convierte en None, que en SQLite es NULL.
@@ -117,11 +168,7 @@ pub async fn crear_nota_venta(
 
     // Dentro de la transacción, así dos ventas simultáneas no pueden tomar el
     // mismo número de nota.
-    let numero_nota: i64 =
-        sqlx::query_scalar("SELECT COALESCE(MAX(numero_nota), 0) + 1 FROM notas_venta")
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+    let numero_nota = calcular_numeracion(&mut tx).await?.siguiente;
 
     // usuario_id y sync_estado se escriben explícitos aunque la tabla ya tenga
     // DEFAULT 'local': el significado de la escritura no debe depender de que
@@ -156,6 +203,67 @@ pub async fn crear_nota_venta(
         id: nota_venta_id,
         numero_nota,
     })
+}
+
+// Vista previa para el formulario de venta y para Ajustes. Usa la misma regla
+// que crear_nota_venta para que el número que se ve sea el que se guarda.
+#[tauri::command]
+pub async fn obtener_siguiente_numero_nota(
+    db_instances: State<'_, DbInstances>,
+) -> Result<NumeracionNotas, String> {
+    let pool = obtener_pool(db_instances.inner()).await?;
+    let mut conn = pool.acquire().await.map_err(|e| e.to_string())?;
+    calcular_numeracion(&mut conn).await
+}
+
+// La validación vive aquí y no solo en la pantalla: un folio igual o menor a
+// la última nota se ignoraría en silencio (la numeración no retrocede) y el
+// usuario creería que empezó en un número que nunca se usa.
+//
+// No pasa por configuracion::guardar_configuracion a propósito: esa guarda en
+// el alcance de la sesión, y el folio es de la instalación.
+#[tauri::command]
+pub async fn guardar_folio_inicial(
+    db_instances: State<'_, DbInstances>,
+    valor: i64,
+) -> Result<(), String> {
+    if !(1..=FOLIO_MAXIMO).contains(&valor) {
+        return Err(format!(
+            "El número de nota debe ser un entero entre 1 y {FOLIO_MAXIMO}."
+        ));
+    }
+
+    let pool = obtener_pool(db_instances.inner()).await?;
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    let ultima: Option<i64> = sqlx::query_scalar("SELECT MAX(numero_nota) FROM notas_venta")
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if let Some(ultima) = ultima {
+        if valor <= ultima {
+            return Err(format!(
+                "No se puede usar la nota #{valor} como inicio: ya existe una nota con ese número o uno mayor. La última es la #{ultima}."
+            ));
+        }
+    }
+
+    // Con usuario_id NULL la PK compuesta no aplica (dos NULL no son iguales),
+    // así que el ON CONFLICT nombra el índice parcial de la v4.
+    sqlx::query(
+        "INSERT INTO configuracion (usuario_id, clave, valor) VALUES (NULL, ?1, ?2)
+         ON CONFLICT(clave) WHERE usuario_id IS NULL
+         DO UPDATE SET valor = excluded.valor",
+    )
+    .bind(CLAVE_FOLIO_INICIAL)
+    .bind(valor.to_string())
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // Reemplaza el contenido de una nota existente. El número de nota NO cambia:

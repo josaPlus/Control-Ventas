@@ -69,17 +69,23 @@ pub const CLAVE_MODO_SESION: &str = "sesion_modo";
 ///
 /// Todas comparten el mismo patrón: quien las lee consulta
 /// `usuario_id IS NULL`. Si la adopción se las llevara bajo una cuenta,
-/// dejarían de encontrarse y la app perdería la sesión recordada, el modo, o
-/// la dirección del servidor.
-pub const CLAVES_DE_INSTALACION: [&str; 3] = [
+/// dejarían de encontrarse y la app perdería la sesión recordada, el modo, la
+/// dirección del servidor, o el folio desde el que numera las notas.
+///
+/// El folio inicial es de la PC y no del usuario porque la numeración que
+/// acota es global: se calcula sobre todas las notas de la base, sin importar
+/// quién las capturó.
+pub const CLAVES_DE_INSTALACION: [&str; 4] = [
     CLAVE_SESION,
     CLAVE_MODO_SESION,
     crate::api::CLAVE_API_URL,
+    crate::ventas::CLAVE_FOLIO_INICIAL,
 ];
 
 /// Fragmento SQL para excluirlas. Se escribe una vez y se usa en el conteo y
 /// en la adopción, para que nunca se puedan desincronizar entre sí.
-const EXCLUIR_CLAVES_INSTALACION: &str = "clave NOT IN (?1, ?2, ?3)";
+/// Ocupa los parámetros ?1 a ?4: quien lo use numera los suyos desde ?5.
+const EXCLUIR_CLAVES_INSTALACION: &str = "clave NOT IN (?1, ?2, ?3, ?4)";
 
 /// Lo que ve el frontend. `password_hash` NO está aquí a propósito: no tiene
 /// por qué cruzar el puente hacia JavaScript ni aparecer en un log.
@@ -772,6 +778,7 @@ pub async fn contar_datos_locales(
     .bind(CLAVES_DE_INSTALACION[0])
     .bind(CLAVES_DE_INSTALACION[1])
     .bind(CLAVES_DE_INSTALACION[2])
+    .bind(CLAVES_DE_INSTALACION[3])
     .fetch_one(&pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -870,12 +877,13 @@ pub async fn adoptar_datos_locales(
     // arranque (adoptar tus datos te desloguearía), y la app perdería la
     // dirección del servidor volviendo al localhost por defecto.
     let configuracion = sqlx::query(&format!(
-        "UPDATE OR IGNORE configuracion SET usuario_id = ?4
+        "UPDATE OR IGNORE configuracion SET usuario_id = ?5
           WHERE usuario_id IS NULL AND {EXCLUIR_CLAVES_INSTALACION}"
     ))
     .bind(CLAVES_DE_INSTALACION[0])
     .bind(CLAVES_DE_INSTALACION[1])
     .bind(CLAVES_DE_INSTALACION[2])
+    .bind(CLAVES_DE_INSTALACION[3])
     .bind(&usuario_id)
     .execute(&mut *tx)
     .await
@@ -887,6 +895,7 @@ pub async fn adoptar_datos_locales(
     .bind(CLAVES_DE_INSTALACION[0])
     .bind(CLAVES_DE_INSTALACION[1])
     .bind(CLAVES_DE_INSTALACION[2])
+    .bind(CLAVES_DE_INSTALACION[3])
     .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?
@@ -1380,17 +1389,18 @@ mod tests {
         let descartados = sqlx::query("DELETE FROM colores_hilo WHERE usuario_id IS NULL")
             .execute(pool).await.unwrap().rows_affected();
         let cfg = sqlx::query(&format!(
-            "UPDATE OR IGNORE configuracion SET usuario_id = ?4
+            "UPDATE OR IGNORE configuracion SET usuario_id = ?5
               WHERE usuario_id IS NULL AND {EXCLUIR_CLAVES_INSTALACION}"
         ))
         .bind(CLAVES_DE_INSTALACION[0]).bind(CLAVES_DE_INSTALACION[1])
-        .bind(CLAVES_DE_INSTALACION[2]).bind(usuario_id)
+        .bind(CLAVES_DE_INSTALACION[2]).bind(CLAVES_DE_INSTALACION[3])
+        .bind(usuario_id)
         .execute(pool).await.unwrap().rows_affected();
         let cfg_descartada = sqlx::query(&format!(
             "DELETE FROM configuracion WHERE usuario_id IS NULL AND {EXCLUIR_CLAVES_INSTALACION}"
         ))
         .bind(CLAVES_DE_INSTALACION[0]).bind(CLAVES_DE_INSTALACION[1])
-        .bind(CLAVES_DE_INSTALACION[2])
+        .bind(CLAVES_DE_INSTALACION[2]).bind(CLAVES_DE_INSTALACION[3])
         .execute(pool).await.unwrap().rows_affected();
         (colores, descartados, cfg, cfg_descartada)
     }

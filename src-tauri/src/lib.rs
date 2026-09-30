@@ -23,7 +23,10 @@ use catalogos::{
 };
 use clientes::{actualizar_cliente, crear_cliente, eliminar_cliente};
 use tauri::Manager; // NUEVO: necesario para app.path()
-use ventas::{actualizar_nota_venta, crear_nota_venta, eliminar_nota_venta};
+use ventas::{
+    actualizar_nota_venta, crear_nota_venta, eliminar_nota_venta, guardar_folio_inicial,
+    obtener_siguiente_numero_nota,
+};
 
 // NUEVO: crea Documentos/Control de Ventas/Save si no existe.
 // create_dir_all no truena si la carpeta ya está ahí, así que es seguro
@@ -99,6 +102,8 @@ pub fn run() {
             crear_nota_venta,
             actualizar_nota_venta,
             eliminar_nota_venta,
+            obtener_siguiente_numero_nota,
+            guardar_folio_inicial,
             crear_cliente,
             actualizar_cliente,
             eliminar_cliente,
