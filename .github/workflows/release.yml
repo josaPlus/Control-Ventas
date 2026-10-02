@@ -45,6 +45,25 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      # NUEVO: toma la sección de esta versión del CHANGELOG (sin las notas
+      # técnicas) para usarla como notas del release y del diálogo de la app.
+      - name: Extraer notas del CHANGELOG
+        id: changelog
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTAS=$(awk -v ver="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "[" ver "]")) { found=1; next } }
+            found && /^### / { exit }
+            found && /^---$/ { next }
+            found { print }
+          ' CHANGELOG.md)
+          {
+            echo "notas<<EOF"
+            echo "$NOTAS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -61,6 +80,7 @@ jobs:
           args: ${{ matrix.args }}
           tagName: ${{ github.ref_name }}
           releaseName: 'v__VERSION__'
-          releaseBody: 'Ver los cambios en CHANGELOG.md'
+          # CAMBIADO: antes era el texto fijo 'Ver los cambios en CHANGELOG.md'
+          releaseBody: ${{ steps.changelog.outputs.notas }}
           releaseDraft: true
           prerelease: false
