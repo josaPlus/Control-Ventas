@@ -128,18 +128,6 @@ pub fn resolver_url(desde_configuracion: Option<String>) -> Option<String> {
     Some(limpio.to_string())
 }
 
-/// Traza a dónde se va a mandar el login. No imprime el usuario ni nada de la
-/// contraseña: solo avisa si el identificador parece un correo, que es la
-/// causa más común de un 401.
-///
-/// TEMPORAL: quitar cuando termine el diagnóstico del login remoto.
-fn diagnostico_peticion(url: &str, identificador: &str) {
-    eprintln!("[DIAG login] POST {url}");
-    if identificador.contains('@') {
-        eprintln!("[DIAG login] el identificador parece un correo: el servidor solo acepta nombre_usuario");
-    }
-}
-
 /// Cliente HTTP con la validación de certificados en su comportamiento por
 /// defecto, que es el correcto aquí.
 ///
@@ -163,20 +151,16 @@ fn cliente() -> Option<reqwest::Client> {
 
 /// Intenta autenticar contra el backend.
 ///
-/// El servidor compara SOLO contra `nombre_usuario` (ver routers/auth.py), así
-/// que si el usuario escribió su correo en el campo de identificador, el
-/// servidor va a responder 401. No es un problema: el flujo cae a local, que
-/// sí sabe resolver correo, y la app entra igual.
+/// `identificador` es el nombre de usuario o el correo: el servidor resuelve
+/// los dos sin distinguir mayúsculas (ver routers/auth.py). Viaja en el campo
+/// `nombre_usuario` porque así se llama en el esquema del servidor.
 pub async fn login(url_base: &str, identificador: &str, password: &str) -> ResultadoRemoto {
     let Some(cliente) = cliente() else {
         return ResultadoRemoto::NoDisponible;
     };
 
-    let url = format!("{url_base}/auth/login");
-    diagnostico_peticion(&url, identificador);
-
     let respuesta = cliente
-        .post(&url)
+        .post(format!("{url_base}/auth/login"))
         .json(&LoginPeticion {
             nombre_usuario: identificador,
             password,
@@ -184,23 +168,13 @@ pub async fn login(url_base: &str, identificador: &str, password: &str) -> Resul
         .send()
         .await;
 
-    let respuesta = match respuesta {
-        Ok(r) => r,
-        // Servidor apagado, DNS que no resuelve, timeout... todo es lo mismo
-        // desde aquí: no hay servidor con quien hablar.
-        Err(e) => {
-            eprintln!("[DIAG login] no hubo respuesta del servidor: {e}");
-            return ResultadoRemoto::NoDisponible;
-        }
+    // Servidor apagado, DNS que no resuelve, timeout... todo es lo mismo
+    // desde aquí: no hay servidor con quien hablar.
+    let Ok(respuesta) = respuesta else {
+        return ResultadoRemoto::NoDisponible;
     };
 
-    eprintln!("[DIAG login] el servidor respondió {}", respuesta.status());
-
     if respuesta.status() == reqwest::StatusCode::UNAUTHORIZED {
-        // El cuerpo del 401 trae el 'detail' de FastAPI, que ayuda a separar
-        // "credenciales invalidas" de cualquier otro rechazo.
-        let detalle = respuesta.text().await.unwrap_or_default();
-        eprintln!("[DIAG login] 401, cuerpo: {detalle}");
         return ResultadoRemoto::Rechazado;
     }
     if !respuesta.status().is_success() {
@@ -280,18 +254,12 @@ async fn usuario_actual(
     url_base: &str,
     token: &str,
 ) -> Option<UsuarioRemoto> {
-    // TEMPORAL (diagnóstico): nada del token se imprime, ni siquiera un
-    // fragmento; solo a qué endpoint se va.
-    eprintln!("[DIAG me] GET {url_base}/auth/me (con token Bearer)");
-
     let respuesta = cliente
         .get(format!("{url_base}/auth/me"))
         .bearer_auth(token)
         .send()
         .await
         .ok()?;
-
-    eprintln!("[DIAG me] el servidor respondió {}", respuesta.status());
 
     if !respuesta.status().is_success() {
         return None;
@@ -583,14 +551,18 @@ mod tests {
         assert!(matches!(resultado, ResultadoRemoto::Rechazado));
     }
 
-    // El endpoint del servidor solo compara nombre_usuario. Que responda 401
-    // ante un correo es el comportamiento correcto, y el que hace que el
-    // fallback a local sea imprescindible para no romper el login por correo.
+    // El servidor resuelve el correo igual que el nombre, sin distinguir
+    // mayúsculas: entrar con correo tiene que dar token, no caer a local.
     #[tokio::test]
     #[ignore = "necesita el backend en 127.0.0.1:8000"]
-    async fn el_servidor_no_acepta_el_correo_como_identificador() {
-        let resultado = login(URL_PRUEBAS, "josafat@correo.com", "hilo1234").await;
-        assert!(matches!(resultado, ResultadoRemoto::Rechazado));
+    async fn el_servidor_acepta_nombre_o_correo_como_identificador() {
+        for identificador in ["Josafat", "josafat", "josafat@correo.com", "JOSAFAT@CORREO.COM"] {
+            let resultado = login(URL_PRUEBAS, identificador, "hilo1234").await;
+            assert!(
+                matches!(resultado, ResultadoRemoto::Autenticado { .. }),
+                "«{identificador}» no autenticó: {resultado:?}"
+            );
+        }
     }
 
     #[tokio::test]

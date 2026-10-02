@@ -500,29 +500,15 @@ async fn validar_contra_sqlite(
 /// Intenta el login contra el backend. `None` = seguir en local, sin ruido.
 ///
 /// Un 401 del servidor tampoco corta el flujo: el vendedor puede tener cuenta
-/// local y no existir todavía en el servidor (o haber escrito su correo, que
-/// el endpoint no acepta como identificador). En los dos casos el login local
-/// tiene la última palabra, y si ahí también falla, sale el mensaje genérico
-/// de siempre.
+/// local y no existir todavía en el servidor. En ese caso el login local tiene
+/// la última palabra, y si ahí también falla, sale el mensaje genérico de
+/// siempre.
 async fn intentar_login_remoto(
     pool: &sqlx::SqlitePool,
     identificador: &str,
     password: &str,
 ) -> Option<(String, String)> {
-    // TEMPORAL (diagnóstico): deja ver a qué servidor se está apuntando de
-    // verdad, y si el login remoto está apagado en esta instalación.
-    let configurada = leer_api_url(pool).await;
-    let url = match crate::api::resolver_url(configurada.clone()) {
-        Some(url) => url,
-        None => {
-            eprintln!(
-                "[DIAG login] login remoto APAGADO (api_url = {configurada:?}); \
-                 se valida solo contra SQLite"
-            );
-            return None;
-        }
-    };
-    eprintln!("[DIAG login] servidor destino: {url}  (api_url en base: {configurada:?})");
+    let url = crate::api::resolver_url(leer_api_url(pool).await)?;
 
     match crate::api::login(&url, identificador, password).await {
         crate::api::ResultadoRemoto::Autenticado { token, usuario } => {

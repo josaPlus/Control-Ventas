@@ -15,7 +15,12 @@
   pointer-events: none;
 }
 
-.searchInput {
+/* `input.` no sobra: la clase global .input de theme.css usa el atajo
+   `padding`, que reinicia el padding-left. Con una sola clase las dos reglas
+   empatan en especificidad y gana la que el bundler deje al final — que es
+   .input, y entonces la lupa queda encima del texto. Agregar el elemento al
+   selector lo decide sin depender del orden. */
+input.searchInput {
   padding-left: 38px;
 }
 

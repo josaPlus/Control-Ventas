@@ -35,7 +35,10 @@
   pointer-events: none;
 }
 
-.searchInput {
+/* `input.` a propósito — ver la nota en ClienteAutocomplete.module.css: sin el
+   elemento, el atajo `padding` de la clase global .input gana por orden y la
+   lupa se encima con el texto. */
+input.searchInput {
   padding-left: 38px;
 }
 
