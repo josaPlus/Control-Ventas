@@ -35,6 +35,8 @@ tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-fs = "2.5.1"
 tauri-plugin-dialog = "2.7.2"
+# Abre el PDF de la nota de remisión con el visor predeterminado del sistema.
+tauri-plugin-opener = "2"
 # Identidad de las filas para el futuro servidor central. v4 = aleatorio, que
 # es lo correcto aquí: no queremos que el id revele fecha ni orden de alta.
 uuid = { version = "1", features = ["v4"] }

@@ -57,6 +57,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_fs::init()) // NUEVO
         .plugin(tauri_plugin_dialog::init()) // NUEVO
+        // Lo usan las notas de remisión para abrir el PDF recién generado.
+        .plugin(tauri_plugin_opener::init())
         // Sesión en memoria. Arranca vacía en cada ejecución; si había una
         // sesión recordada, se recupera de `configuracion` la primera vez que
         // alguien pregunte (ver auth::usuario_id_de_sesion). No se hace aquí

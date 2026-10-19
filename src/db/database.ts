@@ -328,6 +328,109 @@ export async function guardarConfiguracion(clave: string, valor: string): Promis
   await invoke('guardar_configuracion', { clave, valor });
 }
 
+// ============================================
+// DATOS DEL NEGOCIO (emisor de las notas de remisión)
+// ============================================
+
+export const CLAVE_NEGOCIO_NOMBRE = 'negocio_nombre';
+export const CLAVE_NEGOCIO_DOMICILIO = 'negocio_domicilio';
+export const CLAVE_NEGOCIO_TELEFONO = 'negocio_telefono';
+
+export interface DatosNegocio {
+  nombre: string;
+  domicilio: string;
+  telefono: string;
+}
+
+// Cadena vacía cuando la clave todavía no se ha capturado: quien genera la nota
+// decide qué hacer con eso, no esta capa.
+export async function leerDatosNegocio(): Promise<DatosNegocio> {
+  const [nombre, domicilio, telefono] = await Promise.all([
+    leerConfiguracion(CLAVE_NEGOCIO_NOMBRE),
+    leerConfiguracion(CLAVE_NEGOCIO_DOMICILIO),
+    leerConfiguracion(CLAVE_NEGOCIO_TELEFONO),
+  ]);
+  return {
+    nombre: nombre ?? '',
+    domicilio: domicilio ?? '',
+    telefono: telefono ?? '',
+  };
+}
+
+export async function guardarDatosNegocio(datos: DatosNegocio): Promise<void> {
+  await guardarConfiguracion(CLAVE_NEGOCIO_NOMBRE, datos.nombre.trim());
+  await guardarConfiguracion(CLAVE_NEGOCIO_DOMICILIO, datos.domicilio.trim());
+  await guardarConfiguracion(CLAVE_NEGOCIO_TELEFONO, datos.telefono.trim());
+}
+
+// El logo se guarda como data URL dentro de configuracion, no como ruta a un
+// archivo: así viaja con los respaldos de la base y la nota no se rompe si
+// alguien mueve o borra la imagen original. Ya llega reducido (ver
+// lib/logoNegocio.ts), así que pesa poco.
+export const CLAVE_NEGOCIO_LOGO = 'negocio_logo';
+
+export async function leerLogoNegocio(): Promise<string | null> {
+  const valor = await leerConfiguracion(CLAVE_NEGOCIO_LOGO);
+  return valor ? valor : null;
+}
+
+export async function guardarLogoNegocio(dataUrl: string): Promise<void> {
+  await guardarConfiguracion(CLAVE_NEGOCIO_LOGO, dataUrl);
+}
+
+// No hay comando para borrar una clave de configuracion; la cadena vacía
+// significa "sin logo" y leerLogoNegocio la convierte en null.
+export async function quitarLogoNegocio(): Promise<void> {
+  await guardarConfiguracion(CLAVE_NEGOCIO_LOGO, '');
+}
+
+// ============================================
+// PAGARÉ (bloque legal al pie de la nota)
+// ============================================
+
+export const CLAVE_PAGARE_ACTIVO = 'pagare_activo';
+export const CLAVE_PAGARE_BENEFICIARIO = 'pagare_beneficiario';
+export const CLAVE_PAGARE_CIUDAD = 'pagare_ciudad';
+export const CLAVE_PAGARE_INTERES = 'pagare_interes';
+export const CLAVE_PAGARE_DIAS = 'pagare_dias';
+
+export interface DatosPagare {
+  activo: boolean;
+  /** A cuyo nombre se suscribe. Suele ser la persona física, no el negocio. */
+  beneficiario: string;
+  ciudad: string;
+  /** Interés moratorio mensual, en por ciento. */
+  interes: string;
+  /** Días de plazo para calcular el vencimiento desde la fecha de la venta. */
+  dias: string;
+}
+
+export async function leerDatosPagare(): Promise<DatosPagare> {
+  const [activo, beneficiario, ciudad, interes, dias] = await Promise.all([
+    leerConfiguracion(CLAVE_PAGARE_ACTIVO),
+    leerConfiguracion(CLAVE_PAGARE_BENEFICIARIO),
+    leerConfiguracion(CLAVE_PAGARE_CIUDAD),
+    leerConfiguracion(CLAVE_PAGARE_INTERES),
+    leerConfiguracion(CLAVE_PAGARE_DIAS),
+  ]);
+  return {
+    activo: activo === 'si',
+    beneficiario: beneficiario ?? '',
+    ciudad: ciudad ?? '',
+    // Valores del ejemplo real que se tomó como referencia.
+    interes: interes ?? '5',
+    dias: dias ?? '30',
+  };
+}
+
+export async function guardarDatosPagare(datos: DatosPagare): Promise<void> {
+  await guardarConfiguracion(CLAVE_PAGARE_ACTIVO, datos.activo ? 'si' : 'no');
+  await guardarConfiguracion(CLAVE_PAGARE_BENEFICIARIO, datos.beneficiario.trim());
+  await guardarConfiguracion(CLAVE_PAGARE_CIUDAD, datos.ciudad.trim());
+  await guardarConfiguracion(CLAVE_PAGARE_INTERES, datos.interes.trim() || '5');
+  await guardarConfiguracion(CLAVE_PAGARE_DIAS, datos.dias.trim() || '30');
+}
+
 // EXPORTAR DATOS A EXCEL
 
 export interface FilaReporteMensual {

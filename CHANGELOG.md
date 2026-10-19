@@ -8,6 +8,66 @@ cifra cuando hay función nueva y la tercera cuando solo son correcciones.
 
 ---
 
+## [1.6.0] — 2026-10-18
+
+Nueva versión con notas de remisión: ya puedes generar en PDF la nota para entregarle al cliente, con los datos y el logo de tu negocio.
+
+Las notas se guardan solas en una carpeta para cada cliente, así que encontrar la de una venta pasada es tan fácil como abrir la carpeta de esa persona.
+
+### Añadido
+
+**Notas de remisión**
+- Nueva sección **Notas de remisión** en la barra lateral. Se busca la venta
+  por cliente o por número de nota y se genera el PDF.
+- La nota ocupa la **mitad de arriba de una hoja carta**, para que la otra
+  mitad sirva para otra nota. Trae línea de corte.
+- Incluye el número de nota, la fecha, los datos del cliente, el detalle de la
+  venta, el total y el **importe con letra**.
+- Si la venta tiene más líneas de las que caben, la nota sigue en una segunda
+  hoja ("Hoja 1 de 2").
+- **Nota en blanco**: el mismo formato con los renglones vacíos, para llenar a
+  mano. No consume ningún número de nota.
+- También se puede generar desde el detalle de una venta en el **Historial**.
+- El botón **"Abrir e imprimir"** abre el PDF en el visor de Windows, desde
+  donde se imprime.
+
+**Datos de tu negocio**
+- En Ajustes se capturan el nombre, domicilio y teléfono del negocio, que
+  aparecen en el encabezado de cada nota.
+- **Logo del negocio** opcional, en la esquina superior izquierda de la nota.
+  Se elige desde Ajustes, con una vista previa del tamaño exacto que tendrá
+  impreso, y se puede cambiar o quitar cuando quieras.
+- El logo se acomoda solo, sin deformarse, sea grande o pequeño. Si la imagen
+  es muy chica, la app la suaviza y la imprime más pequeña para que no salga
+  pixeleada, y te avisa para que uses una versión más grande si la tienes.
+
+**Pagaré**
+- Opción en Ajustes para agregar al pie de la nota el **pagaré** con la firma
+  del deudor, el beneficiario, la ciudad y el interés moratorio.
+- La fecha de vencimiento se calcula sola a partir de los días de plazo.
+- Solo aparece en las ventas **que no están pagadas**: en una venta liquidada
+  no hay nada que deber.
+
+**Carpetas por cliente**
+- Cada nota se guarda en
+  `Documentos / Control de Ventas / Save / Notas / Clientes`, en una carpeta
+  con el nombre y número del cliente, y con el número de nota al inicio del
+  archivo para que queden en orden.
+- Botón **"Abrir carpeta del cliente"** después de generar una nota, para ver
+  todas las de esa persona.
+- Si la nota ya existía, la app pregunta antes de reemplazarla.
+
+### Notas técnicas
+
+- Los datos del negocio, el pagaré y el logo se guardan por usuario, igual que
+  el resto de los ajustes. El logo se guarda reducido dentro de la base, así
+  que viaja con los respaldos y no depende del archivo original.
+- Sin migraciones de base de datos nuevas.
+- Se agregó una verificación automática (`.github/workflows/ci.yml`) que en
+  cada cambio compila la app y corre los tests en Windows, Linux y Mac.
+
+---
+
 ## [1.5.0] — 2026-10-02
 
 Nueva versión con cuentas de usuario, conexión con el servidor central y folio inicial configurable para las notas de venta.
