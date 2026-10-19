@@ -1,0 +1,93 @@
+name: 'Verificar'
+
+# Comprueba que la app compila y que los tests pasan, sin generar instaladores
+# ni publicar nada. El release real sigue siendo release.yml, con una etiqueta.
+on:
+  # Cada push a cualquier rama: el error aparece en cuanto se sube, no hasta
+  # que se abre el PR. Las etiquetas no entran aquí: esas las atiende release.yml.
+  push:
+    branches:
+      - '**'
+  # El PR se verifica aparte porque GitHub prueba el resultado de mezclar la
+  # rama con master, que puede fallar aunque la rama sola compile.
+  pull_request:
+    branches:
+      - master
+
+# Si se suben dos commits seguidos, la verificación del primero ya no importa.
+concurrency:
+  group: verificar-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    strategy:
+      fail-fast: false
+      # Las mismas plataformas que release.yml. Algunas dependencias (keyring,
+      # reqwest) compilan distinto en cada sistema, y un error en una sola
+      # rompería el release en esa plataforma.
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            target: 'aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            target: 'x86_64-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            target: ''
+          - platform: 'windows-latest'
+            target: ''
+
+    runs-on: ${{ matrix.platform }}
+    env:
+      # build.rs falla a propósito si falta: mismo secreto que usa el release.
+      CONTROL_VENTAS_API_URL_POR_DEFECTO: ${{ secrets.CONTROL_VENTAS_API_URL_POR_DEFECTO }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Sin caché, cada corrida recompila todas las dependencias de Rust desde
+      # cero, y eso es la mayor parte del tiempo.
+      - name: Caché de Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'src-tauri -> target'
+          key: ${{ matrix.target }}
+
+      - name: Install dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      # npm ci y no npm install: instala exactamente lo que dice
+      # package-lock.json, así que un lock desactualizado se detecta aquí.
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Va antes que Rust a propósito: generate_context! incrusta la carpeta
+      # dist, y sin ella el código de Rust no compila.
+      - name: Typecheck y build del frontend
+        run: npm run build
+
+      - name: cargo check
+        working-directory: src-tauri
+        shell: bash
+        run: cargo check --locked ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+      # Solo en la plataforma nativa de cada runner: la variante Intel de Mac
+      # se compila (arriba) pero no se ejecuta en un runner ARM.
+      - name: cargo test
+        if: matrix.target != 'x86_64-apple-darwin'
+        working-directory: src-tauri
+        run: cargo test --locked
