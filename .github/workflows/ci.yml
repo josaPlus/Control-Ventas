@@ -20,6 +20,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # tauri build se niega a compilar si npm y Rust traen versiones de Tauri
+  # distintas, pero aquí no se corre tauri build. Esta revisión hace la misma
+  # comprobación en segundos, para que el desfase aparezca en el PR y no al
+  # etiquetar el release (que es como falló el primer intento de la 1.6.0).
+  versiones-tauri:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Versiones de Tauri iguales en npm y Rust
+        run: node scripts/verificar-versiones-tauri.mjs
+
   verificar:
     strategy:
       fail-fast: false
