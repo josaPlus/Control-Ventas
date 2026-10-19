@@ -8,9 +8,9 @@ cifra cuando hay función nueva y la tercera cuando solo son correcciones.
 
 ---
 
-## [1.6.0] — 2026-10-18
+## [1.6.0] — 2026-10-19
 
-Nueva versión con notas de remisión: ya puedes generar en PDF la nota para entregarle al cliente, con los datos y el logo de tu negocio.
+Nueva versión con notas de remisión: ya puedes generar en PDF la nota para entregarle al cliente, con los datos de tu negocio y hasta dos logos, por ejemplo uno por cada marca de hilo que vendes.
 
 Las notas se guardan solas en una carpeta para cada cliente, así que encontrar la de una venta pasada es tan fácil como abrir la carpeta de esa persona.
 
@@ -34,12 +34,15 @@ Las notas se guardan solas en una carpeta para cada cliente, así que encontrar 
 **Datos de tu negocio**
 - En Ajustes se capturan el nombre, domicilio y teléfono del negocio, que
   aparecen en el encabezado de cada nota.
-- **Logo del negocio** opcional, en la esquina superior izquierda de la nota.
-  Se elige desde Ajustes, con una vista previa del tamaño exacto que tendrá
-  impreso, y se puede cambiar o quitar cuando quieras.
-- El logo se acomoda solo, sin deformarse, sea grande o pequeño. Si la imagen
-  es muy chica, la app la suaviza y la imprime más pequeña para que no salga
-  pixeleada, y te avisa para que uses una versión más grande si la tienes.
+- **Hasta dos logos** opcionales: el primero en la esquina superior izquierda
+  de la nota y el segundo en la derecha. Sirve, por ejemplo, para poner una
+  marca de hilo de cada lado. Si solo usas uno, va a la izquierda.
+- Se eligen desde Ajustes, cada uno con una vista previa del tamaño exacto que
+  tendrá impreso, y se pueden cambiar o quitar cuando quieras.
+- Cada logo se acomoda solo, sin deformarse, sea grande o pequeño. Si la
+  imagen es muy chica, la app la suaviza y la imprime más pequeña para que no
+  salga pixeleada, y te avisa para que uses una versión más grande si la
+  tienes.
 
 **Pagaré**
 - Opción en Ajustes para agregar al pie de la nota el **pagaré** con la firma
@@ -59,9 +62,9 @@ Las notas se guardan solas en una carpeta para cada cliente, así que encontrar 
 
 ### Notas técnicas
 
-- Los datos del negocio, el pagaré y el logo se guardan por usuario, igual que
-  el resto de los ajustes. El logo se guarda reducido dentro de la base, así
-  que viaja con los respaldos y no depende del archivo original.
+- Los datos del negocio, el pagaré y los logos se guardan por usuario, igual
+  que el resto de los ajustes. Los logos se guardan reducidos dentro de la
+  base, así que viajan con los respaldos y no dependen del archivo original.
 - Sin migraciones de base de datos nuevas.
 - Se agregó una verificación automática (`.github/workflows/ci.yml`) que en
   cada cambio compila la app y corre los tests en Windows, Linux y Mac.
