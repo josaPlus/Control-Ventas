@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { useConfiguracion } from "../context/ConfiguracionContext";
 import {
   type DatosNegocio,
@@ -9,11 +9,20 @@ import {
   leerConfiguracion,
   leerDatosNegocio,
   guardarDatosNegocio,
+  leerLogoNegocio,
+  guardarLogoNegocio,
+  quitarLogoNegocio,
   leerDatosPagare,
   guardarDatosPagare,
   obtenerNumeracionNotas,
   type NumeracionNotas,
 } from "../db/database";
+import {
+  ErrorLogo,
+  LOGO_ANCHO_MM,
+  medidasLogoEnNota,
+  prepararLogo,
+} from "../lib/logoNegocio";
 import AdopcionDatosLocales from "../components/AdopcionDatosLocales";
 import SincronizacionServidor from "../components/SincronizacionServidor";
 import CatalogoEditor from "../components/CatalogoEditor";
@@ -21,6 +30,14 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import styles from "./Ajustes.module.css";
 
 const NEGOCIO_VACIO: DatosNegocio = { nombre: "", domicilio: "", telefono: "" };
+
+// Ancho en pantalla del recuadro de vista previa; debe coincidir con .logoMarco.
+// Con él se pasa de mm a px, para que el logo se vea del mismo tamaño relativo
+// que tendrá en la nota.
+const ANCHO_VISTA_PREVIA_PX = 240;
+const PX_POR_MM = ANCHO_VISTA_PREVIA_PX / LOGO_ANCHO_MM;
+
+type MedidasLogo = ReturnType<typeof medidasLogoEnNota>;
 
 // Mismo tope que FOLIO_MAXIMO en src-tauri/src/ventas.rs.
 const FOLIO_MAXIMO = 999_999_999;
@@ -62,9 +79,38 @@ export default function Ajustes() {
   const [guardandoPagare, setGuardandoPagare] = useState(false);
   const [avisoPagare, setAvisoPagare] = useState<string | null>(null);
 
+  const [logo, setLogo] = useState<string | null>(null);
+  const [procesandoLogo, setProcesandoLogo] = useState(false);
+  const [avisoLogo, setAvisoLogo] = useState<string | null>(null);
+  const [errorLogo, setErrorLogo] = useState<string | null>(null);
+  const [confirmandoQuitarLogo, setConfirmandoQuitarLogo] = useState(false);
+  const [medidasLogo, setMedidasLogo] = useState<MedidasLogo | null>(null);
+  // Solo para pintar el aviso de guardado como advertencia y no como éxito.
+  const [logoPequeno, setLogoPequeno] = useState(false);
+  const inputLogoRef = useRef<HTMLInputElement>(null);
+
+  // Las medidas salen de la imagen ya guardada, con la misma función que usa
+  // el PDF, así que la vista previa no puede mostrar algo distinto a la nota.
+  useEffect(() => {
+    setMedidasLogo(null);
+    if (!logo) return;
+    let vigente = true;
+    const img = new Image();
+    img.onload = () => {
+      if (vigente) setMedidasLogo(medidasLogoEnNota(img.naturalWidth, img.naturalHeight));
+    };
+    img.src = logo;
+    return () => {
+      vigente = false;
+    };
+  }, [logo]);
+
   useEffect(() => {
     leerDatosNegocio()
       .then(setNegocio)
+      .catch((err) => console.error(err));
+    leerLogoNegocio()
+      .then(setLogo)
       .catch((err) => console.error(err));
     leerDatosPagare()
       .then(setPagare)
@@ -108,6 +154,48 @@ export default function Ajustes() {
   function actualizarNegocio(campo: keyof DatosNegocio, valor: string) {
     setNegocio((prev) => ({ ...prev, [campo]: valor }));
     setAvisoNegocio(null);
+  }
+
+  // El logo se guarda en cuanto se elige, aparte del botón "Guardar datos": no
+  // hay nada que escribir ni corregir antes, así que pedir un segundo clic solo
+  // sería una forma de perder el cambio.
+  async function elegirLogo(e: ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    // Sin esto, elegir otra vez el mismo archivo no dispararía onChange.
+    e.target.value = "";
+    if (!archivo) return;
+
+    setProcesandoLogo(true);
+    setAvisoLogo(null);
+    setErrorLogo(null);
+    setLogoPequeno(false);
+    try {
+      const { dataUrl, pequena } = await prepararLogo(archivo);
+      await guardarLogoNegocio(dataUrl);
+      setLogo(dataUrl);
+      setAvisoLogo(
+        pequena
+          ? "Logo guardado, pero la imagen es pequeña: se suavizó para que no se vea pixeleada y puede salir más chica en la nota. Si tienes una versión más grande, úsala."
+          : "Logo guardado. Aparecerá en las notas de remisión que generes a partir de ahora."
+      );
+      setLogoPequeno(pequena);
+    } catch (err) {
+      console.error(err);
+      setErrorLogo(
+        err instanceof ErrorLogo ? err.message : "No se pudo guardar el logo. Intenta de nuevo."
+      );
+    } finally {
+      setProcesandoLogo(false);
+    }
+  }
+
+  async function confirmarQuitarLogo() {
+    await quitarLogoNegocio();
+    setLogo(null);
+    setConfirmandoQuitarLogo(false);
+    setErrorLogo(null);
+    setLogoPequeno(false);
+    setAvisoLogo("Se quitó el logo. Las notas nuevas saldrán sin él.");
   }
 
   const [numeracion, setNumeracion] = useState<NumeracionNotas | null>(null);
@@ -233,6 +321,80 @@ export default function Ajustes() {
 
         {avisoNegocio && <div className={styles.avisoExito}>{avisoNegocio}</div>}
         {errorNegocio && <div className={styles.avisoError}>{errorNegocio}</div>}
+
+        <div className={styles.logoSeccion}>
+          <span className="field-label">Logo</span>
+          <p className={styles.logoAyuda}>
+            Aparece en la esquina superior izquierda de la nota y se ajusta solo
+            al espacio, sin deformarse. PNG, JPG o WEBP, hasta 5 MB.
+          </p>
+
+          <div className={styles.logoFila}>
+            <div className={styles.logoMarco}>
+              {logo ? (
+                <img
+                  src={logo}
+                  alt="Logo del negocio"
+                  className={styles.logoImagen}
+                  style={
+                    medidasLogo
+                      ? {
+                          width: medidasLogo.ancho * PX_POR_MM,
+                          height: medidasLogo.alto * PX_POR_MM,
+                        }
+                      : { visibility: "hidden" }
+                  }
+                />
+              ) : (
+                <span className={styles.logoVacio}>Sin logo</span>
+              )}
+            </div>
+
+            <div className={styles.logoBotones}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => inputLogoRef.current?.click()}
+                disabled={procesandoLogo}
+              >
+                {procesandoLogo ? "Procesando..." : logo ? "Cambiar imagen" : "Elegir imagen"}
+              </button>
+              {logo && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setConfirmandoQuitarLogo(true)}
+                  disabled={procesandoLogo}
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+
+            <input
+              ref={inputLogoRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={elegirLogo}
+              hidden
+            />
+          </div>
+
+          {medidasLogo?.reducido && (
+            <p className={styles.logoNotaTamano}>
+              Por su resolución se imprimirá a {medidasLogo.ancho.toFixed(0)} ×{" "}
+              {medidasLogo.alto.toFixed(0)} mm, más chico que el espacio, para que
+              no se vea borroso.
+            </p>
+          )}
+
+          {avisoLogo && (
+            <div className={logoPequeno ? styles.avisoAdvertencia : styles.avisoExito}>
+              {avisoLogo}
+            </div>
+          )}
+          {errorLogo && <div className={styles.avisoError}>{errorLogo}</div>}
+        </div>
       </div>
 
       <div className={`card ${styles.seccion}`}>
@@ -467,6 +629,23 @@ export default function Ajustes() {
           confirmLabel={confirmando.nuevoValor ? "Activar" : "Desactivar"}
           onConfirm={confirmarCambio}
           onCancel={() => setConfirmando(null)}
+        />
+      )}
+
+      {confirmandoQuitarLogo && (
+        <ConfirmDialog
+          title="¿Quitar el logo?"
+          message={
+            <>
+              Las notas de remisión que generes a partir de ahora saldrán sin logo.
+              Las que ya guardaste no cambian. Para volver a ponerlo tendrás que
+              elegir la imagen otra vez.
+            </>
+          }
+          confirmLabel="Quitar"
+          tono="peligro"
+          onConfirm={confirmarQuitarLogo}
+          onCancel={() => setConfirmandoQuitarLogo(false)}
         />
       )}
 

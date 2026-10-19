@@ -3,7 +3,11 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { documentDir } from "@tauri-apps/api/path";
 import { listarNotasVenta, leerDatosNegocio } from "../db/database";
 import type { VentaConComprador } from "../lib/dashboardStats";
-import { exportarNotaDeVenta, exportarNotaEnBlanco } from "../lib/exportarNotaRemision";
+import {
+  carpetaLegible,
+  exportarNotaDeVenta,
+  exportarNotaEnBlanco,
+} from "../lib/exportarNotaRemision";
 import { useConfiguracion } from "../context/ConfiguracionContext";
 import { formatMoney, formatDateLong } from "../lib/format";
 import styles from "./NotasRemision.module.css";
@@ -11,7 +15,14 @@ import styles from "./NotasRemision.module.css";
 const CARPETA_DESTINO = "Documentos / Control de Ventas / Save / Notas";
 
 type Resultado =
-  | { tipo: "exito"; archivo: string; ruta: string }
+  | {
+      tipo: "exito";
+      archivo: string;
+      ruta: string;
+      carpeta: string;
+      /** La nota en blanco no es de nadie: no tiene carpeta de cliente que abrir. */
+      deCliente: boolean;
+    }
   | { tipo: "cancelado" }
   | { tipo: "error"; detalle: string };
 
@@ -64,12 +75,18 @@ export default function NotasRemision() {
     setGenerando("venta");
     setResultado(null);
     try {
-      const { exportado, ruta } = await exportarNotaDeVenta(seleccionada.id!, manejaTipos);
+      const { exportado, ruta, carpeta } = await exportarNotaDeVenta(seleccionada.id!, manejaTipos);
       if (!exportado) {
         setResultado({ tipo: "cancelado" });
         return;
       }
-      setResultado({ tipo: "exito", archivo: ruta.split("/").pop() ?? ruta, ruta });
+      setResultado({
+        tipo: "exito",
+        archivo: ruta.split("/").pop() ?? ruta,
+        ruta,
+        carpeta,
+        deCliente: true,
+      });
     } catch (err) {
       console.error(err);
       setResultado({
@@ -86,8 +103,14 @@ export default function NotasRemision() {
     setGenerando("blanco");
     setResultado(null);
     try {
-      const { ruta } = await exportarNotaEnBlanco(manejaTipos);
-      setResultado({ tipo: "exito", archivo: ruta.split("/").pop() ?? ruta, ruta });
+      const { ruta, carpeta } = await exportarNotaEnBlanco(manejaTipos);
+      setResultado({
+        tipo: "exito",
+        archivo: ruta.split("/").pop() ?? ruta,
+        ruta,
+        carpeta,
+        deCliente: false,
+      });
     } catch (err) {
       console.error(err);
       setResultado({
@@ -100,8 +123,10 @@ export default function NotasRemision() {
     }
   }
 
-  // Abre el PDF en el visor del sistema, que es desde donde se imprime.
-  async function abrir(ruta: string) {
+  // Abre el PDF en el visor del sistema, que es desde donde se imprime, o una
+  // carpeta en el Explorador: openPath hace lo mismo que un doble clic.
+  // `carpeta` solo sirve para decirle al usuario dónde buscar si falla.
+  async function abrir(ruta: string, carpeta: string) {
     try {
       const documentos = await rutaDocumentos();
       await openPath(`${documentos}\\${ruta.replace(/\//g, "\\")}`);
@@ -109,7 +134,7 @@ export default function NotasRemision() {
       console.error(err);
       setResultado({
         tipo: "error",
-        detalle: `No se pudo abrir el archivo. Búscalo en ${CARPETA_DESTINO}.`,
+        detalle: `No se pudo abrir. Búscalo en ${carpetaLegible(carpeta)}.`,
       });
     }
   }
@@ -135,8 +160,9 @@ export default function NotasRemision() {
       <div className={`card ${styles.seccion}`}>
         <h3 className={styles.titulo}>Nota de una venta registrada</h3>
         <p className={styles.descripcion}>
-          Se guarda en <strong>{CARPETA_DESTINO}</strong> con el nombre del
-          cliente y el número de nota, para que la encuentres fácil.
+          Se guarda en <strong>{CARPETA_DESTINO} / Clientes</strong>, en una
+          carpeta para cada cliente y con el número de nota en el nombre, para
+          que la encuentres fácil.
         </p>
 
         <div className="field">
@@ -232,15 +258,27 @@ export default function NotasRemision() {
         <div className={`${styles.aviso} ${styles.avisoExito}`}>
           <strong>Nota generada.</strong>
           <span>
-            Se guardó <strong>{resultado.archivo}</strong> en {CARPETA_DESTINO}.
+            Se guardó <strong>{resultado.archivo}</strong> en{" "}
+            {carpetaLegible(resultado.carpeta)}.
           </span>
-          <button
-            type="button"
-            className={`btn btn-secondary btn-sm ${styles.abrirBtn}`}
-            onClick={() => abrir(resultado.ruta)}
-          >
-            Abrir e imprimir
-          </button>
+          <div className={styles.abrirAcciones}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => abrir(resultado.ruta, resultado.carpeta)}
+            >
+              Abrir e imprimir
+            </button>
+            {resultado.deCliente && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => abrir(resultado.carpeta, resultado.carpeta)}
+              >
+                Abrir carpeta del cliente
+              </button>
+            )}
+          </div>
         </div>
       )}
 

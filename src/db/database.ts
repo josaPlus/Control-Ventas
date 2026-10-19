@@ -363,6 +363,27 @@ export async function guardarDatosNegocio(datos: DatosNegocio): Promise<void> {
   await guardarConfiguracion(CLAVE_NEGOCIO_TELEFONO, datos.telefono.trim());
 }
 
+// El logo se guarda como data URL dentro de configuracion, no como ruta a un
+// archivo: así viaja con los respaldos de la base y la nota no se rompe si
+// alguien mueve o borra la imagen original. Ya llega reducido (ver
+// lib/logoNegocio.ts), así que pesa poco.
+export const CLAVE_NEGOCIO_LOGO = 'negocio_logo';
+
+export async function leerLogoNegocio(): Promise<string | null> {
+  const valor = await leerConfiguracion(CLAVE_NEGOCIO_LOGO);
+  return valor ? valor : null;
+}
+
+export async function guardarLogoNegocio(dataUrl: string): Promise<void> {
+  await guardarConfiguracion(CLAVE_NEGOCIO_LOGO, dataUrl);
+}
+
+// No hay comando para borrar una clave de configuracion; la cadena vacía
+// significa "sin logo" y leerLogoNegocio la convierte en null.
+export async function quitarLogoNegocio(): Promise<void> {
+  await guardarConfiguracion(CLAVE_NEGOCIO_LOGO, '');
+}
+
 // ============================================
 // PAGARÉ (bloque legal al pie de la nota)
 // ============================================

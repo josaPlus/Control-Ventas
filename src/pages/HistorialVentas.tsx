@@ -8,7 +8,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import NotaVentaForm from "../components/NotaVentaForm";
 import { useConfiguracion } from "../context/ConfiguracionContext";
 import { IconPencil, IconTrash, IconRecibo } from "../components/Icons";
-import { exportarNotaDeVenta } from "../lib/exportarNotaRemision";
+import { carpetaLegible, exportarNotaDeVenta } from "../lib/exportarNotaRemision";
 import styles from "./HistorialVentas.module.css";
 
 type FiltroEstado = "todos" | "pagado" | "pendiente";
@@ -119,10 +119,10 @@ export default function HistorialVentas() {
     setGenerandoRemision(true);
     setAvisoRemision(null);
     try {
-      const { exportado, ruta } = await exportarNotaDeVenta(notaAbierta!.id!, manejaTipos);
+      const { exportado, ruta, carpeta } = await exportarNotaDeVenta(notaAbierta!.id!, manejaTipos);
       setAvisoRemision(
         exportado
-          ? `Se guardó ${ruta.split("/").pop()} en Documentos / Control de Ventas / Save / Notas.`
+          ? `Se guardó ${ruta.split("/").pop()} en ${carpetaLegible(carpeta)}.`
           : "No se reemplazó la nota anterior."
       );
     } catch (err) {
