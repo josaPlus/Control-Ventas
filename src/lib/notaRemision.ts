@@ -1,6 +1,6 @@
 import type { jsPDF } from 'jspdf';
 import type { DetalleVenta } from '../types/models';
-import type { DatosNegocio, DatosPagare } from '../db/database';
+import type { DatosNegocio, DatosPagare, LadoLogo, LogosNegocio } from '../db/database';
 import { formatMoney } from './format';
 import { numeroALetras } from './numeroALetras';
 import { LOGO_ALTO_MM, medidasLogoEnNota } from './logoNegocio';
@@ -24,8 +24,8 @@ export interface DatosNotaRemision {
   pagado: boolean;
   comentario: string | null;
   mostrarTipoHilo: boolean;
-  /** Data URL del logo del negocio. null = la nota sale sin logo. */
-  logo: string | null;
+  /** Data URL de cada logo. Un lado en null simplemente no lleva logo. */
+  logos: LogosNegocio;
 }
 
 // Carta vertical. La nota ocupa solo la mitad de arriba para que la de abajo
@@ -49,12 +49,21 @@ const Y_TABLA = 38;
 const ALTO_ENCABEZADO_TABLA = 6.5;
 const Y_FIRMA = 130;
 
-// Recuadro del logo, en la esquina superior izquierda: es el único hueco libre
-// del encabezado. Su tamaño está en lib/logoNegocio.ts (36 × 11.5 mm); termina
-// en 16 mm porque el nombre del cliente, debajo, empieza cerca de 17.5. El 4.5
-// de arriba deja fuera la orilla que muchas impresoras no alcanzan a imprimir.
+// Recuadros de los logos, uno en cada esquina superior. Su tamaño está en
+// lib/logoNegocio.ts (36 × 11.5 mm); terminan en 16 mm porque los datos del
+// cliente, debajo, empiezan cerca de 17.5. El 4.5 de arriba deja fuera la
+// orilla que muchas impresoras no alcanzan a imprimir.
 const LOGO_Y = 4.5;
 const SEPARACION_LOGO = 3;
+
+// Sin logo derecho, el folio arranca arriba, a la altura del nombre del
+// negocio, como siempre. Con logo derecho ese espacio es del logo, así que el
+// folio baja a la altura del cliente; el paso se aprieta para que "Hoja 1 de 2"
+// siga cabiendo antes de la línea separadora aun con el renglón de vencimiento.
+const Y_FOLIO_ARRIBA = Y_DATOS - 5;
+const PASO_FOLIO = 5;
+const Y_FOLIO_BAJO_LOGO = Y_DATOS;
+const PASO_FOLIO_BAJO_LOGO = 4.5;
 
 const GRIS_LINEA = 150;
 // Todo en negro y grises: la nota se imprime, muchas veces en láser B/N, y
@@ -128,28 +137,31 @@ export function sumarDias(iso: string, dias: number): string {
 }
 
 /**
- * Dibuja el logo con el tamaño que decide medidasLogoEnNota (el mismo que
+ * Dibuja un logo con el tamaño que decide medidasLogoEnNota (el mismo que
  * muestra la vista previa de Ajustes) y devuelve el ancho que ocupó, o 0 si no
  * se pudo dibujar.
  */
-function dibujarLogo(doc: jsPDF, logo: string): number {
+function dibujarLogo(doc: jsPDF, logo: string, lado: LadoLogo): number {
   // Un logo dañado no debe impedir entregarle la nota al cliente: se omite y
   // la nota sale como si no hubiera logo.
   try {
     const props = doc.getImageProperties(logo);
     const { ancho, alto } = medidasLogoEnNota(props.width, props.height);
-    // Pegado al margen, para alinearse con el bloque del cliente que va debajo,
-    // y centrado en vertical por si no ocupa todo el alto del recuadro.
+    // Cada uno pegado a su margen, para alinearse con el bloque que va debajo
+    // (cliente a la izquierda, folio a la derecha), y centrado en vertical por
+    // si no ocupa todo el alto del recuadro.
+    const x = lado === 'izquierdo' ? MARGEN : ANCHO_HOJA - MARGEN - ancho;
     // El alias hace que jsPDF incruste la imagen una sola vez aunque la nota
-    // tenga varias hojas.
+    // tenga varias hojas. Tiene que ser distinto por lado: con el mismo alias,
+    // jsPDF reutilizaría la primera imagen y saldría el mismo logo dos veces.
     doc.addImage(
       logo,
       props.fileType,
-      MARGEN,
+      x,
       LOGO_Y + (LOGO_ALTO_MM - alto) / 2,
       ancho,
       alto,
-      'logo-negocio',
+      `logo-${lado}`,
       'FAST'
     );
     return ancho;
@@ -167,12 +179,20 @@ function dibujarEncabezado(
 ) {
   const { negocio, cliente, numeroNota, fecha, pagare } = datos;
 
-  const anchoLogo = datos.logo ? dibujarLogo(doc, datos.logo) : 0;
+  const anchoLogoIzquierdo = datos.logos.izquierdo
+    ? dibujarLogo(doc, datos.logos.izquierdo, 'izquierdo')
+    : 0;
+  const anchoLogoDerecho = datos.logos.derecho
+    ? dibujarLogo(doc, datos.logos.derecho, 'derecho')
+    : 0;
   // El nombre sigue centrado en la hoja, así que se le quita el mismo espacio
-  // de los dos lados: si solo se recortara a la izquierda, dejaría de verse
-  // centrado.
+  // de los dos lados (el del logo más ancho): si solo se recortara de un lado,
+  // dejaría de verse centrado.
+  const anchoReservado = Math.max(anchoLogoIzquierdo, anchoLogoDerecho);
   const anchoTextoNegocio =
-    anchoLogo > 0 ? ANCHO_HOJA - 2 * (MARGEN + anchoLogo + SEPARACION_LOGO) : ANCHO_UTIL;
+    anchoReservado > 0
+      ? ANCHO_HOJA - 2 * (MARGEN + anchoReservado + SEPARACION_LOGO)
+      : ANCHO_UTIL;
 
   // Nombre del negocio centrado, como en las notas de remisión de imprenta.
   if (negocio.nombre) {
@@ -226,7 +246,9 @@ function dibujarEncabezado(
   // ---- Bloque derecho: folio, fechas ----
   const etiquetaX = ANCHO_HOJA - MARGEN - 42;
   const valorX = ANCHO_HOJA - MARGEN;
-  let y = Y_DATOS - 5;
+  const hayLogoDerecho = anchoLogoDerecho > 0;
+  let y = hayLogoDerecho ? Y_FOLIO_BAJO_LOGO : Y_FOLIO_ARRIBA;
+  const paso = hayLogoDerecho ? PASO_FOLIO_BAJO_LOGO : PASO_FOLIO;
 
   const renglones: [string, string][] = [
     ['NO DOCTO.', numeroNota !== null ? `R-${numeroNota}` : '____________'],
@@ -248,7 +270,7 @@ function dibujarEncabezado(
     doc.text(etiqueta, etiquetaX, y);
     doc.setFont('helvetica', 'normal');
     doc.text(valor, valorX, y, { align: 'right' });
-    y += 5;
+    y += paso;
   }
 
   if (totalHojas > 1) {

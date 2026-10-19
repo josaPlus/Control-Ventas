@@ -4,7 +4,7 @@ import {
   obtenerNotaCompleta,
   leerDatosNegocio,
   leerDatosPagare,
-  leerLogoNegocio,
+  leerLogosNegocio,
 } from '../db/database';
 import { generarNotaRemision } from './notaRemision';
 
@@ -94,10 +94,10 @@ export async function exportarNotaDeVenta(
   const nota = await obtenerNotaCompleta(notaVentaId);
   if (!nota) throw new Error('La venta ya no existe.');
 
-  const [negocio, pagare, logo] = await Promise.all([
+  const [negocio, pagare, logos] = await Promise.all([
     leerDatosNegocio(),
     leerDatosPagare(),
-    leerLogoNegocio(),
+    leerLogosNegocio(),
   ]);
 
   // Misma regla que usa el detalle del historial: la columna aparece si el
@@ -117,7 +117,7 @@ export async function exportarNotaDeVenta(
     pagado: nota.pagado,
     comentario: nota.comentario ?? null,
     mostrarTipoHilo,
-    logo,
+    logos,
   });
 
   // El número va primero para que dentro de la carpeta del cliente queden en
@@ -128,10 +128,10 @@ export async function exportarNotaDeVenta(
 }
 
 export async function exportarNotaEnBlanco(manejaTipos: boolean): Promise<NotaExportada> {
-  const [negocio, pagare, logo] = await Promise.all([
+  const [negocio, pagare, logos] = await Promise.all([
     leerDatosNegocio(),
     leerDatosPagare(),
-    leerLogoNegocio(),
+    leerLogosNegocio(),
   ]);
 
   const pdf = await generarNotaRemision({
@@ -147,7 +147,7 @@ export async function exportarNotaEnBlanco(manejaTipos: boolean): Promise<NotaEx
     pagado: false,
     comentario: null,
     mostrarTipoHilo: manejaTipos,
-    logo,
+    logos,
   });
 
   // Se sobrescribe sin preguntar: es una plantilla idéntica cada vez, no hay

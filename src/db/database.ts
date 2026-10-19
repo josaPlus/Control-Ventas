@@ -363,25 +363,49 @@ export async function guardarDatosNegocio(datos: DatosNegocio): Promise<void> {
   await guardarConfiguracion(CLAVE_NEGOCIO_TELEFONO, datos.telefono.trim());
 }
 
-// El logo se guarda como data URL dentro de configuracion, no como ruta a un
-// archivo: así viaja con los respaldos de la base y la nota no se rompe si
-// alguien mueve o borra la imagen original. Ya llega reducido (ver
-// lib/logoNegocio.ts), así que pesa poco.
-export const CLAVE_NEGOCIO_LOGO = 'negocio_logo';
+// Los logos se guardan como data URL dentro de configuracion, no como ruta a
+// un archivo: así viajan con los respaldos de la base y la nota no se rompe si
+// alguien mueve o borra la imagen original. Ya llegan reducidos (ver
+// lib/logoNegocio.ts), así que pesan poco.
+//
+// Hay dos porque hay negocios que venden dos marcas (por ejemplo, San Rafael y
+// encerado) y quieren las dos en la nota. No más: en el encabezado de media
+// hoja un tercero dejaría a todos diminutos.
+export type LadoLogo = 'izquierdo' | 'derecho';
 
-export async function leerLogoNegocio(): Promise<string | null> {
-  const valor = await leerConfiguracion(CLAVE_NEGOCIO_LOGO);
+export interface LogosNegocio {
+  izquierdo: string | null;
+  derecho: string | null;
+}
+
+// El izquierdo conserva la clave de cuando solo había un logo, para que el que
+// ya estaba guardado siga apareciendo en su lugar sin migrar nada.
+const CLAVES_LOGO: Record<LadoLogo, string> = {
+  izquierdo: 'negocio_logo',
+  derecho: 'negocio_logo_derecho',
+};
+
+export async function leerLogoNegocio(lado: LadoLogo): Promise<string | null> {
+  const valor = await leerConfiguracion(CLAVES_LOGO[lado]);
   return valor ? valor : null;
 }
 
-export async function guardarLogoNegocio(dataUrl: string): Promise<void> {
-  await guardarConfiguracion(CLAVE_NEGOCIO_LOGO, dataUrl);
+export async function leerLogosNegocio(): Promise<LogosNegocio> {
+  const [izquierdo, derecho] = await Promise.all([
+    leerLogoNegocio('izquierdo'),
+    leerLogoNegocio('derecho'),
+  ]);
+  return { izquierdo, derecho };
+}
+
+export async function guardarLogoNegocio(lado: LadoLogo, dataUrl: string): Promise<void> {
+  await guardarConfiguracion(CLAVES_LOGO[lado], dataUrl);
 }
 
 // No hay comando para borrar una clave de configuracion; la cadena vacía
 // significa "sin logo" y leerLogoNegocio la convierte en null.
-export async function quitarLogoNegocio(): Promise<void> {
-  await guardarConfiguracion(CLAVE_NEGOCIO_LOGO, '');
+export async function quitarLogoNegocio(lado: LadoLogo): Promise<void> {
+  await guardarConfiguracion(CLAVES_LOGO[lado], '');
 }
 
 // ============================================
