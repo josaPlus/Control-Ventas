@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { formatearDiaLegible, numeroDeSemanaIso, rangoSemanaLegible } from './semanas';
 
 export interface FilaReporte {
   numeroNota: number;
@@ -26,15 +27,16 @@ const BORDE_FINO = {
   right: { style: 'thin' as const, color: { argb: 'FFC3C2B7' } },
 };
 
-export async function generarReporteMensual(
-  filas: FilaReporte[]
-): Promise<ExcelJS.Buffer> {
+// Crea el libro con la hoja ya formateada (título opcional + encabezados) y
+// devuelve todo lo que los reportes necesitan para seguir escribiendo filas.
+function crearLibro(titulo?: string) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Control de Ventas';
   workbook.created = new Date();
 
+  const filasFijas = titulo ? 2 : 1;
   const hoja = workbook.addWorksheet('Ventas', {
-    views: [{ state: 'frozen', ySplit: 1 }],
+    views: [{ state: 'frozen', ySplit: filasFijas }],
   });
 
   hoja.columns = [
@@ -53,7 +55,24 @@ export async function generarReporteMensual(
     { header: 'Comentario', key: 'comentario', width: 24 },
   ];
 
-  const filaEncabezado = hoja.getRow(1);
+  // Al declarar `columns` ExcelJS ya escribió los encabezados en la fila 1.
+  // Si hay título, se inserta una fila arriba y los encabezados bajan a la 2.
+  if (titulo) {
+    hoja.spliceRows(1, 0, []);
+    const filaTitulo = hoja.getRow(1);
+    hoja.mergeCells(1, 1, 1, hoja.columnCount);
+    filaTitulo.getCell(1).value = titulo;
+    filaTitulo.getCell(1).font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+    filaTitulo.getCell(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: COLOR_TOTAL },
+    };
+    filaTitulo.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
+    filaTitulo.height = 26;
+  }
+
+  const filaEncabezado = hoja.getRow(filasFijas);
   filaEncabezado.eachCell((celda) => {
     celda.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_ENCABEZADO } };
@@ -62,28 +81,7 @@ export async function generarReporteMensual(
   });
   filaEncabezado.height = 22;
 
-  const agregarFilaSubtotal = (etiqueta: string, monto: number) => {
-    const fila = hoja.addRow({ comprador: etiqueta, subtotal: monto });
-    fila.eachCell({ includeEmpty: true }, (celda) => {
-      celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_SUBTOTAL } };
-      celda.font = { bold: true };
-      celda.border = BORDE_FINO;
-    });
-    fila.getCell('subtotal').numFmt = '"$"#,##0.00';
-  };
-
-  let semanaActual: number | null = null;
-  let subtotalSemana = 0;
-
-  for (const fila of filas) {
-    const semanaFila = numeroDeSemanaISO(fila.fecha);
-    if (semanaActual !== null && semanaFila !== semanaActual) {
-      agregarFilaSubtotal(`Subtotal semana ${semanaActual}`, subtotalSemana);
-      subtotalSemana = 0;
-    }
-    semanaActual = semanaFila;
-    subtotalSemana += fila.subtotal;
-
+  const agregarFilaVenta = (fila: FilaReporte) => {
     const filaExcel = hoja.addRow({
       numeroNota: fila.numeroNota,
       fecha: fila.fecha,
@@ -105,32 +103,95 @@ export async function generarReporteMensual(
     });
     filaExcel.getCell('precioPina').numFmt = '"$"#,##0.00';
     filaExcel.getCell('subtotal').numFmt = '"$"#,##0.00';
+  };
+
+  const agregarFilaSubtotal = (etiqueta: string, monto: number) => {
+    const fila = hoja.addRow({ comprador: etiqueta, subtotal: monto });
+    fila.eachCell({ includeEmpty: true }, (celda) => {
+      celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_SUBTOTAL } };
+      celda.font = { bold: true };
+      celda.border = BORDE_FINO;
+    });
+    fila.getCell('subtotal').numFmt = '"$"#,##0.00';
+  };
+
+  const agregarFilaTotal = (etiqueta: string, monto: number) => {
+    const fila = hoja.addRow({ comprador: etiqueta, subtotal: monto });
+    fila.eachCell({ includeEmpty: true }, (celda) => {
+      celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_TOTAL } };
+      celda.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+      celda.border = BORDE_FINO;
+    });
+    fila.getCell('subtotal').numFmt = '"$"#,##0.00';
+  };
+
+  return { workbook, agregarFilaVenta, agregarFilaSubtotal, agregarFilaTotal };
+}
+
+const sumarSubtotales = (filas: FilaReporte[]) =>
+  filas.reduce((acc, f) => acc + f.subtotal, 0);
+
+export async function generarReporteMensual(
+  filas: FilaReporte[]
+): Promise<ExcelJS.Buffer> {
+  const { workbook, agregarFilaVenta, agregarFilaSubtotal, agregarFilaTotal } =
+    crearLibro();
+
+  let semanaActual: number | null = null;
+  let subtotalSemana = 0;
+
+  for (const fila of filas) {
+    const semanaFila = numeroDeSemanaIso(fila.fecha);
+    if (semanaActual !== null && semanaFila !== semanaActual) {
+      agregarFilaSubtotal(`Subtotal semana ${semanaActual}`, subtotalSemana);
+      subtotalSemana = 0;
+    }
+    semanaActual = semanaFila;
+    subtotalSemana += fila.subtotal;
+
+    agregarFilaVenta(fila);
   }
 
   if (semanaActual !== null) {
     agregarFilaSubtotal(`Subtotal semana ${semanaActual}`, subtotalSemana);
   }
 
-  const totalMes = filas.reduce((acc, f) => acc + f.subtotal, 0);
-  const filaTotal = hoja.addRow({ comprador: 'TOTAL DEL MES', subtotal: totalMes });
-  filaTotal.eachCell({ includeEmpty: true }, (celda) => {
-    celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_TOTAL } };
-    celda.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
-    celda.border = BORDE_FINO;
-  });
-  filaTotal.getCell('subtotal').numFmt = '"$"#,##0.00';
+  agregarFilaTotal('TOTAL DEL MES', sumarSubtotales(filas));
 
   return workbook.xlsx.writeBuffer();
 }
 
-// Semana ISO (lunes a domingo) — así el "subtotal semana" agrupa igual
-// que en tu bitácora vieja, sin depender de en qué día cae el 1 del mes.
-function numeroDeSemanaISO(fechaIso: string): number {
-  const fecha = new Date(fechaIso);
-  const objetivo = new Date(fecha.valueOf());
-  const diaSemana = (fecha.getDay() + 6) % 7;
-  objetivo.setDate(objetivo.getDate() - diaSemana + 3);
-  const primerJueves = new Date(objetivo.getFullYear(), 0, 4);
-  const diferenciaDias = (objetivo.getTime() - primerJueves.getTime()) / 86400000;
-  return 1 + Math.round((diferenciaDias - ((primerJueves.getDay() + 6) % 7)) / 7);
+// lunesIso: lunes de la semana reportada. Aquí no hay subtotales semanales
+// (sería un solo bloque repetido); en su lugar se corta por día, que es el
+// detalle útil cuando el reporte cubre una sola semana.
+export async function generarReporteSemanal(
+  filas: FilaReporte[],
+  lunesIso: string
+): Promise<ExcelJS.Buffer> {
+  const titulo = `Semana ${numeroDeSemanaIso(lunesIso)} — ${rangoSemanaLegible(lunesIso)}`;
+  const { workbook, agregarFilaVenta, agregarFilaSubtotal, agregarFilaTotal } =
+    crearLibro(titulo);
+
+  let diaActual: string | null = null;
+  let subtotalDia = 0;
+
+  for (const fila of filas) {
+    const diaFila = fila.fecha.slice(0, 10);
+    if (diaActual !== null && diaFila !== diaActual) {
+      agregarFilaSubtotal(`Subtotal ${formatearDiaLegible(diaActual)}`, subtotalDia);
+      subtotalDia = 0;
+    }
+    diaActual = diaFila;
+    subtotalDia += fila.subtotal;
+
+    agregarFilaVenta(fila);
+  }
+
+  if (diaActual !== null) {
+    agregarFilaSubtotal(`Subtotal ${formatearDiaLegible(diaActual)}`, subtotalDia);
+  }
+
+  agregarFilaTotal('TOTAL DE LA SEMANA', sumarSubtotales(filas));
+
+  return workbook.xlsx.writeBuffer();
 }

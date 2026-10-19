@@ -1,6 +1,7 @@
 use tauri_plugin_sql::{DbInstances, DbPool};
 
-pub const DB_URL: &str = "sqlite:ventas.db";
+// Viene de plugins.sql.preload en tauri.conf.json (lo exporta build.rs).
+pub const DB_URL: &str = env!("CONTROL_VENTAS_DB_URL");
 
 // El pool es un Arc por dentro, así que clonarlo es barato y nos deja soltar
 // el candado de lectura antes de empezar a trabajar contra la base.

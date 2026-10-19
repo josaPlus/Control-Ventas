@@ -1,0 +1,111 @@
+.pantalla {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background-color: var(--surface-page);
+}
+
+.tarjeta {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 28px 26px 28px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-hairline);
+  background-color: var(--surface-card);
+  box-shadow: var(--shadow-md);
+}
+
+.icono {
+  color: var(--accent-500);
+  margin-bottom: 12px;
+}
+
+.titulo {
+  font-size: 1.35rem;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  color: var(--ink-primary);
+}
+
+.subtitulo {
+  font-size: 0.87rem;
+  color: var(--ink-secondary);
+  line-height: 1.55;
+  margin: 0 0 24px 0;
+}
+
+/* Los campos van alineados a la izquierda aunque la tarjeta esté centrada:
+   una etiqueta centrada sobre su input se lee mal. */
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+}
+
+.botonPrincipal {
+  width: 100%;
+  height: 42px;
+  margin-top: 4px;
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.aviso {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background-color: var(--status-warning-bg);
+  color: var(--ink-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.alternativas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.enlace {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-500);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.enlace:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.enlace:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.nota {
+  margin: 22px 0 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-hairline);
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  line-height: 1.5;
+}

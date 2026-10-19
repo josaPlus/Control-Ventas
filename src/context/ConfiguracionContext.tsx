@@ -5,6 +5,7 @@ import {
   guardarConfiguracion,
   baseTieneDatos,
 } from "../db/database";
+import { useSesion } from "./SesionContext";
 import Bienvenida from "../pages/Bienvenida";
 import styles from "./ConfiguracionContext.module.css";
 
@@ -34,13 +35,17 @@ type Estado = "cargando" | "sin-configurar" | "listo" | "error";
  * propia ni barra lateral, y no es un lugar al que se pueda navegar.
  */
 export function ConfiguracionProvider({ children }: { children: ReactNode }) {
+  const { revisionDatos } = useSesion();
   const [estado, setEstado] = useState<Estado>("cargando");
   const [manejaTipos, setManejaTipos] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Se reejecuta al cambiar de alcance (entrar, salir, adoptar) porque desde
+  // la v4 la configuración es por usuario: tras adoptar, 'maneja_tipos_hilo'
+  // vive bajo la cuenta y hay que releerlo desde ahí.
   useEffect(() => {
     detectar();
-  }, []);
+  }, [revisionDatos]);
 
   async function detectar() {
     try {

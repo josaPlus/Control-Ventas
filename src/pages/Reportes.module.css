@@ -31,6 +31,42 @@
   margin: 0 0 18px 0;
 }
 
+/* Selector mensual/semanal: dos botones pegados que se leen como pestañas. */
+.tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-sunken);
+}
+
+.tab {
+  padding: 7px 20px;
+  border: none;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 0.87rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab:hover:not(:disabled) {
+  color: var(--ink-primary);
+}
+
+.tab:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.tabActiva {
+  background-color: var(--surface-card);
+  color: var(--ink-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
 /* El botón se alinea abajo para que quede a la altura de los select, no de
    sus etiquetas. */
 .controles {
@@ -47,6 +83,39 @@
 .exportarBtn {
   min-width: 180px;
   height: 42px;
+}
+
+.campoSemana {
+  min-width: 280px;
+}
+
+.rangoSemana {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 14px;
+  font-size: 0.85rem;
+  color: var(--ink-secondary);
+}
+
+.enlaceSemana {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-500);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.enlaceSemana:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.enlaceSemana:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .aviso {

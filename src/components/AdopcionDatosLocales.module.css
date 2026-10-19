@@ -1,0 +1,45 @@
+.seccion {
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.titulo {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: var(--ink-primary);
+}
+
+.descripcion {
+  font-size: 0.85rem;
+  color: var(--ink-secondary);
+  line-height: 1.55;
+  margin: 0 0 12px 0;
+}
+
+.boton {
+  min-width: 190px;
+  height: 40px;
+  margin-top: 4px;
+}
+
+.aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.87rem;
+  line-height: 1.5;
+}
+
+.avisoExito {
+  background-color: var(--status-good-bg);
+  color: var(--status-good);
+}
+
+.avisoError {
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+}

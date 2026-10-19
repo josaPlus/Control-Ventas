@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useSesion } from "../context/SesionContext";
 import styles from "./Navbar.module.css";
 
 const links = [
@@ -10,7 +11,15 @@ const links = [
   { to: "/reportes", label: "Reportes", icon: IconReporte },
 ];
 
-export default function Navbar() {
+interface NavbarProps {
+  /** Abre la pantalla de login. La sesión es opcional, así que esto es un
+   *  acceso más de la barra, no una interrupción. */
+  onIniciarSesion: () => void;
+}
+
+export default function Navbar({ onIniciarSesion }: NavbarProps) {
+  const { usuario, conexion, cerrarSesion } = useSesion();
+
   return (
     <aside className={styles.sidebar}>
       <div className={styles.brand}>
@@ -50,6 +59,53 @@ export default function Navbar() {
         <IconEngrane className={styles.icon} />
         Ajustes
       </NavLink>
+
+      {/* La sesión va abajo del todo: no es navegación, es de quién son los
+          datos que se están viendo. */}
+      <div className={styles.sesion}>
+        {usuario ? (
+          <>
+            <div className={styles.usuario}>
+              <span className={styles.avatar} aria-hidden="true">
+                {usuario.nombre_usuario.charAt(0).toUpperCase()}
+              </span>
+              <div className={styles.usuarioTexto}>
+                <span className={styles.usuarioNombre} title={usuario.nombre_usuario}>
+                  {usuario.nombre_usuario}
+                </span>
+                <span className={styles.usuarioRol}>{usuario.rol}</span>
+              </div>
+            </div>
+
+            {/* Informativo, no una alarma: en modo local la app funciona
+                completa. Solo dice de dónde vino la validación. */}
+            {conexion && (
+              <span
+                className={`${styles.conexion} ${
+                  conexion.modo === "remoto" ? styles.conexionRemota : styles.conexionLocal
+                }`}
+                title={
+                  conexion.modo === "remoto"
+                    ? `Sesión verificada con ${conexion.api_url}`
+                    : "Sesión validada en esta computadora. Todo funciona igual."
+                }
+              >
+                {conexion.modo === "remoto" ? "Conectado al servidor" : "Solo esta PC"}
+              </span>
+            )}
+            <button type="button" className={styles.sesionBtn} onClick={cerrarSesion}>
+              Cerrar sesión
+            </button>
+          </>
+        ) : (
+          <>
+            <div className={styles.sinSesion}>Sin iniciar sesión</div>
+            <button type="button" className={styles.sesionBtn} onClick={onIniciarSesion}>
+              Iniciar sesión
+            </button>
+          </>
+        )}
+      </div>
 
       <div className={styles.footer}>Uso local · sin conexión</div>
     </aside>

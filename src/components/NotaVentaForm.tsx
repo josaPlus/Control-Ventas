@@ -7,6 +7,7 @@ import {
   leerCatalogo,
 } from "../db/database";
 import { useConfiguracion } from "../context/ConfiguracionContext";
+import { useSesion } from "../context/SesionContext";
 import { formatMoney, todayIso } from "../lib/format";
 import ClienteAutocomplete from "./ClienteAutocomplete";
 import ConfirmDialog from "./ConfirmDialog";
@@ -41,6 +42,7 @@ export default function NotaVentaForm({
 }: NotaVentaFormProps = {}) {
   const editando = notaExistente !== undefined;
   const { manejaTipos } = useConfiguracion();
+  const { revisionDatos } = useSesion();
 
   // Sugerencias de los datalist. Se llenan solas al guardar ventas, así que hay
   // que releerlas después de cada alta o el formulario se queda con la lista
@@ -72,9 +74,12 @@ export default function NotaVentaForm({
     if (!editando) cargarSiguienteNumero();
   }, [editando]);
 
+  // Depende de revisionDatos además de manejaTipos: el catálogo tiene alcance
+  // por sesión, así que al entrar, salir o adoptar hay que volver a pedirlo o
+  // se quedarían pintadas las sugerencias del alcance anterior.
   useEffect(() => {
     cargarCatalogos();
-  }, [manejaTipos]);
+  }, [manejaTipos, revisionDatos]);
 
   async function cargarCatalogos() {
     try {

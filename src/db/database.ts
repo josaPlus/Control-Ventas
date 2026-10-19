@@ -1,6 +1,9 @@
 import Database from '@tauri-apps/plugin-sql';
 import { invoke } from '@tauri-apps/api/core';
 import type { Cliente, NotaVenta, DetalleVenta, NotaVentaCompleta } from '../types/models';
+import { sumarDias } from '../lib/semanas';
+// Misma fuente que usa Rust (build.rs): plugins.sql.preload de tauri.conf.json.
+import { plugins } from '../../src-tauri/tauri.conf.json';
 
 // Se memoiza la promesa, no la conexión ya resuelta. Si se guardara la
 // conexión, dos llamadas simultáneas al arrancar la app verían ambas el valor
@@ -10,7 +13,7 @@ let dbPromise: Promise<Database> | null = null;
 
 export async function getDb(): Promise<Database> {
   if (!dbPromise) {
-    dbPromise = Database.load('sqlite:ventas.db');
+    dbPromise = Database.load(plugins.sql.preload[0]);
   }
   return await dbPromise;
 }
@@ -19,13 +22,17 @@ export async function getDb(): Promise<Database> {
 // CLIENTES
 // ============================================
 
+// El alta pasa por Rust y no por un INSERT directo: la fila necesita
+// usuario_id y sync_estado, y quién tiene la sesión abierta solo se sabe de
+// aquel lado. Sin sesión, el cliente queda local, igual que siempre.
 export async function crearCliente(cliente: Cliente): Promise<number> {
-  const database = await getDb();
-  const result = await database.execute(
-    'INSERT INTO clientes (comprador, domicilio, telefono) VALUES ($1, $2, $3)',
-    [cliente.comprador, cliente.domicilio, cliente.telefono]
-  );
-  return result.lastInsertId!;
+  return await invoke<number>('crear_cliente', {
+    cliente: {
+      comprador: cliente.comprador,
+      domicilio: cliente.domicilio,
+      telefono: cliente.telefono,
+    },
+  });
 }
 
 export async function listarClientes(): Promise<Cliente[]> {
@@ -44,12 +51,18 @@ export async function buscarClientes(texto: string): Promise<Cliente[]> {
   );
 }
 
+// También por Rust: además de guardar, vuelve a poner la fila en la cola de
+// sincronización. usuario_id no se toca — el cliente conserva a quien lo dio
+// de alta aunque lo edite otra sesión.
 export async function actualizarCliente(cliente: Cliente): Promise<void> {
-  const database = await getDb();
-  await database.execute(
-    'UPDATE clientes SET comprador = $1, domicilio = $2, telefono = $3 WHERE id = $4',
-    [cliente.comprador, cliente.domicilio, cliente.telefono, cliente.id]
-  );
+  await invoke('actualizar_cliente', {
+    clienteId: cliente.id,
+    cliente: {
+      comprador: cliente.comprador,
+      domicilio: cliente.domicilio,
+      telefono: cliente.telefono,
+    },
+  });
 }
 
 // Sólo se puede borrar un cliente que no tenga ventas registradas. Si las
@@ -62,13 +75,21 @@ export async function eliminarCliente(clienteId: number): Promise<void> {
 // NOTAS DE VENTA
 // ============================================
 
-// Calcula el siguiente número de nota de forma automática y consecutiva
+export interface NumeracionNotas {
+  siguiente: number;
+  /** null cuando todavía no hay notas registradas. */
+  ultima: number | null;
+}
+
+// La regla (última nota + 1, respetando el folio inicial) vive solo en Rust,
+// en el mismo lugar que asigna el número al guardar. Si se calculara también
+// aquí, la vista previa podría mostrar un número distinto al que se guarda.
+export async function obtenerNumeracionNotas(): Promise<NumeracionNotas> {
+  return await invoke<NumeracionNotas>('obtener_siguiente_numero_nota');
+}
+
 export async function obtenerSiguienteNumeroNota(): Promise<number> {
-  const database = await getDb();
-  const result = await database.select<{ siguiente: number }[]>(
-    'SELECT COALESCE(MAX(numero_nota), 0) + 1 AS siguiente FROM notas_venta'
-  );
-  return result[0].siguiente;
+  return (await obtenerNumeracionNotas()).siguiente;
 }
 
 // Forma en que el backend espera una línea de venta. Se comparte entre crear y
@@ -204,16 +225,13 @@ export async function actualizarEstadoPago(
 export type Catalogo = 'colores_hilo' | 'tipos_hilo';
 
 // Los catálogos se llenan solos al guardar una venta (lo hace Rust, dentro de
-// la transacción). Aquí solo se leen, para alimentar las sugerencias.
+// la transacción).
 //
-// El nombre de tabla se interpola porque SQL no permite bindearlo como
-// parámetro; el tipo Catalogo es lo que lo mantiene acotado.
+// La lectura también pasa por Rust desde la v4: el catálogo tiene alcance por
+// usuario, y un SELECT sin filtrar mezclaría las entradas de todos. Rust acota
+// por la sesión activa, o por el catálogo local cuando no hay sesión.
 export async function leerCatalogo(catalogo: Catalogo): Promise<string[]> {
-  const database = await getDb();
-  const filas = await database.select<{ nombre: string }[]>(
-    `SELECT nombre FROM ${catalogo} ORDER BY nombre COLLATE NOCASE ASC`
-  );
-  return filas.map((f) => f.nombre);
+  return await invoke<string[]>('leer_catalogo', { catalogo });
 }
 
 // Da de alta una entrada a mano. Devuelve el nombre ya normalizado, que es el
@@ -271,13 +289,25 @@ export async function contarLineasConTipoHilo(): Promise<number> {
 // formulario de venta. Ausente = todavía no se ha configurado la app.
 export const CLAVE_MANEJA_TIPOS = 'maneja_tipos_hilo';
 
+// Número desde el que arranca la numeración de notas, para quien ya llevaba
+// notas en papel. Es un piso: la numeración nunca retrocede. Ausente = 1.
+// Es de la instalación, no del usuario: vive con usuario_id NULL, así que
+// leerConfiguracion lo encuentra con o sin sesión. Se guarda con
+// guardarFolioInicial, no con guardarConfiguracion, que lo pondría en el
+// alcance de la sesión.
+export const CLAVE_FOLIO_INICIAL = 'folio_inicial';
+
+// Rechaza un folio igual o menor a la última nota registrada.
+export async function guardarFolioInicial(valor: number): Promise<void> {
+  await invoke('guardar_folio_inicial', { valor });
+}
+
+// Desde la v4 configuracion tiene alcance por usuario, así que la consulta ya
+// no puede vivir aquí con un usuario_id fijo: en cuanto se adoptan los datos
+// locales, la fila cambia de alcance. Rust lee el de la sesión y cae al local
+// si esa cuenta todavía no tiene valor propio.
 export async function leerConfiguracion(clave: string): Promise<string | null> {
-  const database = await getDb();
-  const filas = await database.select<{ valor: string }[]>(
-    'SELECT valor FROM configuracion WHERE clave = $1',
-    [clave]
-  );
-  return filas.length > 0 ? filas[0].valor : null;
+  return await invoke<string | null>('leer_configuracion', { clave });
 }
 
 // Distingue una instalación recién estrenada de una que ya venía funcionando.
@@ -291,13 +321,11 @@ export async function baseTieneDatos(): Promise<boolean> {
   return (filas[0]?.total ?? 0) > 0;
 }
 
+// Guarda en el alcance de quien esté operando. El ON CONFLICT no es el mismo
+// con sesión que sin ella (PK compuesta vs. índice parcial), y esa decisión
+// necesita saber quién está logueado, así que vive en Rust.
 export async function guardarConfiguracion(clave: string, valor: string): Promise<void> {
-  const database = await getDb();
-  await database.execute(
-    `INSERT INTO configuracion (clave, valor) VALUES ($1, $2)
-     ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor`,
-    [clave, valor]
-  );
+  await invoke('guardar_configuracion', { clave, valor });
 }
 
 // ============================================
@@ -400,19 +428,13 @@ export interface FilaReporteMensual {
   comentario: string | null;
 }
 
-// anio: 2026, mes: 1-12
-export async function obtenerFilasReporteMensual(
-  anio: number,
-  mes: number
+// Rango semiabierto [desde, hasta) en formato 'YYYY-MM-DD'. Es la base de los
+// reportes mensuales y semanales: sólo cambia el rango que se le pasa.
+export async function obtenerFilasReportePorRango(
+  desde: string,
+  hasta: string
 ): Promise<FilaReporteMensual[]> {
   const database = await getDb();
-  const mesStr = String(mes).padStart(2, '0');
-  const desde = `${anio}-${mesStr}-01`;
-  // día 32 "desborda" al mes siguiente en formato texto ISO, así que
-  // comparamos con < inicio del mes siguiente en vez de calcular el último día
-  const anioSiguiente = mes === 12 ? anio + 1 : anio;
-  const mesSiguiente = mes === 12 ? 1 : mes + 1;
-  const hasta = `${anioSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`;
 
   const filas = await database.select<any[]>(
     `SELECT
@@ -438,4 +460,27 @@ export async function obtenerFilasReporteMensual(
   );
 
   return filas.map((f) => ({ ...f, pagado: !!f.pagado }));
+}
+
+// anio: 2026, mes: 1-12
+export async function obtenerFilasReporteMensual(
+  anio: number,
+  mes: number
+): Promise<FilaReporteMensual[]> {
+  const mesStr = String(mes).padStart(2, '0');
+  const desde = `${anio}-${mesStr}-01`;
+  // día 32 "desborda" al mes siguiente en formato texto ISO, así que
+  // comparamos con < inicio del mes siguiente en vez de calcular el último día
+  const anioSiguiente = mes === 12 ? anio + 1 : anio;
+  const mesSiguiente = mes === 12 ? 1 : mes + 1;
+  const hasta = `${anioSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`;
+
+  return obtenerFilasReportePorRango(desde, hasta);
+}
+
+// lunesIso: lunes de la semana, 'YYYY-MM-DD'. Cubre lunes a domingo.
+export async function obtenerFilasReporteSemanal(
+  lunesIso: string
+): Promise<FilaReporteMensual[]> {
+  return obtenerFilasReportePorRango(lunesIso, sumarDias(lunesIso, 7));
 }
