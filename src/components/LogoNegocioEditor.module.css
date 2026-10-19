@@ -1,0 +1,100 @@
+.seccion {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.ayuda {
+  font-size: 0.83rem;
+  color: var(--ink-muted);
+  line-height: 1.45;
+  margin: 4px 0 12px 0;
+}
+
+.fila {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Misma proporción que el recuadro del logo en la nota (36 × 11.5 mm), para
+   que la vista previa muestre exactamente cómo se va a acomodar. El fondo es
+   blanco aun en modo oscuro porque representa el papel.
+   content-box para que los 240px sean el área del recuadro sin contar el
+   padding: LogoNegocioEditor.tsx convierte mm a px con ese ancho
+   (ANCHO_VISTA_PREVIA_PX). */
+.marco {
+  box-sizing: content-box;
+  width: 240px;
+  aspect-ratio: 36 / 11.5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 4px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background-color: #ffffff;
+}
+
+/* En la nota, el logo derecho va pegado al margen derecho. */
+.marcoDerecho {
+  justify-content: flex-end;
+}
+
+/* El tamaño exacto lo pone el componente con las mismas medidas que el PDF;
+   los máximos solo evitan que se desborde mientras la imagen carga. */
+.imagen {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.vacio {
+  width: 100%;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #8a8a8a;
+}
+
+.botones {
+  display: flex;
+  gap: 8px;
+}
+
+.notaTamano {
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  line-height: 1.45;
+  margin: 10px 0 0 0;
+}
+
+.avisoExito {
+  margin-top: 14px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--status-good-bg);
+  color: var(--status-good);
+  font-size: 0.84rem;
+}
+
+.avisoError {
+  margin-top: 14px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical);
+  font-size: 0.84rem;
+}
+
+/* El amarillo de --status-warning no se lee como texto sobre fondo claro, así
+   que el color va en la orilla y el texto queda en el tono normal. */
+.avisoAdvertencia {
+  margin-top: 14px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--status-warning);
+  background-color: var(--status-warning-bg);
+  color: var(--ink-primary);
+  font-size: 0.84rem;
+}
